@@ -1,0 +1,9 @@
+.walkthrough/
+__pycache__/
+*.egg-info/
+.venv/
+node_modules/
+renderer/public/walkthrough.json
+renderer/public/audio/
+renderer/out/
+.env
