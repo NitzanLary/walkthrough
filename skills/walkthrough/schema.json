@@ -1,0 +1,304 @@
+{
+  "$defs": {
+    "AudioRef": {
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "duration_ms"
+      ],
+      "title": "AudioRef",
+      "type": "object"
+    },
+    "Chapter": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "overview",
+            "show",
+            "scroll",
+            "zoom",
+            "highlight",
+            "closing"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Focus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "narration": {
+          "title": "Narration",
+          "type": "string"
+        },
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "action",
+        "narration"
+      ],
+      "title": "Chapter",
+      "type": "object"
+    },
+    "FileEntry": {
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "status": {
+          "enum": [
+            "added",
+            "modified",
+            "deleted",
+            "renamed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "old_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Old Path"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Before"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After"
+        }
+      },
+      "required": [
+        "path",
+        "status"
+      ],
+      "title": "FileEntry",
+      "type": "object"
+    },
+    "Focus": {
+      "properties": {
+        "start": {
+          "minimum": 1,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "anchor": {
+          "title": "Anchor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "anchor"
+      ],
+      "title": "Focus",
+      "type": "object"
+    },
+    "Meta": {
+      "properties": {
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "base": {
+          "title": "Base",
+          "type": "string"
+        },
+        "head": {
+          "title": "Head",
+          "type": "string"
+        },
+        "base_sha": {
+          "title": "Base Sha",
+          "type": "string"
+        },
+        "head_sha": {
+          "title": "Head Sha",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "stats": {
+          "$ref": "#/$defs/Stats"
+        },
+        "skipped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skipped",
+          "type": "array"
+        },
+        "generated_at": {
+          "title": "Generated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "base",
+        "head",
+        "base_sha",
+        "head_sha",
+        "title",
+        "summary",
+        "stats",
+        "generated_at"
+      ],
+      "title": "Meta",
+      "type": "object"
+    },
+    "Stats": {
+      "properties": {
+        "files": {
+          "title": "Files",
+          "type": "integer"
+        },
+        "added": {
+          "title": "Added",
+          "type": "integer"
+        },
+        "removed": {
+          "title": "Removed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "files",
+        "added",
+        "removed"
+      ],
+      "title": "Stats",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/FileEntry"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "chapters": {
+      "items": {
+        "$ref": "#/$defs/Chapter"
+      },
+      "title": "Chapters",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "meta",
+    "files",
+    "chapters"
+  ],
+  "title": "Walkthrough",
+  "type": "object"
+}
