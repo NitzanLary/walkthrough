@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from . import WT_JSON
 from .git import fill_contents
+from .markdown import render_markdown
 from .schema import Walkthrough
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
                        check_focus_ranges)
@@ -57,6 +58,25 @@ def validate() -> None:
         _fail(errors)
     WT_JSON.write_text(wt.model_dump_json(indent=2))
     typer.echo(f"ok — {len(wt.chapters)} chapters, {len(wt.files)} files")
+
+
+def _load_validated() -> Walkthrough:
+    wt = _load_plan()
+    for ch in wt.chapters:
+        if ch.file is not None:
+            f = next((x for x in wt.files if x.path == ch.file), None)
+            if f is None or f.after is None:
+                _fail(["plan has no file content — run `walkthrough validate` first"])
+    return wt
+
+
+@app.command()
+def markdown() -> None:
+    """Render the validated plan as .walkthrough/walkthrough.md."""
+    wt = _load_validated()
+    out = WT_JSON.parent / "walkthrough.md"
+    out.write_text(render_markdown(wt))
+    typer.echo(str(out))
 
 
 if __name__ == "__main__":
