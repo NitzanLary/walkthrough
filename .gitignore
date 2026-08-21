@@ -1,6 +1,7 @@
 .walkthrough/
 __pycache__/
 *.egg-info/
+venv/
 .venv/
 node_modules/
 renderer/public/walkthrough.json
