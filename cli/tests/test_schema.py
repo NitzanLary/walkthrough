@@ -80,3 +80,12 @@ def test_schema_json_in_sync_with_models():
     emitted = Walkthrough.model_json_schema()
     on_disk = json.loads((REPO / "skills/walkthrough/schema.json").read_text())
     assert emitted == on_disk
+
+
+def test_small_example_is_schema_valid_agent_form():
+    data = json.loads((REPO / "skills/walkthrough/examples/small.json").read_text())
+    wt = Walkthrough.model_validate(data)
+    assert all(f.before is None and f.after is None for f in wt.files)
+    assert all(c.audio is None for c in wt.chapters)
+    assert wt.chapters[0].action == "overview"
+    assert wt.chapters[-1].action == "closing"

@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "meta": {
+    "repo": "demo-api",
+    "base": "main",
+    "head": "feat/rate-limit",
+    "base_sha": "4f2a9c81d7e3b5a09c6d4e8f1b2a3c4d5e6f7a8b",
+    "head_sha": "9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c",
+    "title": "Token-bucket rate limiting for the public API",
+    "summary": "The change adds a token-bucket rate limiter and applies it to every public route. Buckets are kept per API key in memory, refill at a fixed rate, and reject over-limit requests with HTTP 429.",
+    "stats": { "files": 3, "added": 128, "removed": 9 },
+    "skipped": ["poetry.lock"],
+    "generated_at": "2026-08-21T09:00:00Z"
+  },
+  "files": [
+    {
+      "path": "api/rate_limit.py",
+      "language": "python",
+      "status": "added",
+      "old_path": null
+    },
+    {
+      "path": "api/app.py",
+      "language": "python",
+      "status": "modified",
+      "old_path": null
+    },
+    {
+      "path": "tests/test_rate_limit.py",
+      "language": "python",
+      "status": "added",
+      "old_path": null
+    }
+  ],
+  "chapters": [
+    {
+      "id": "c01",
+      "title": "Overview",
+      "action": "overview",
+      "file": null,
+      "focus": null,
+      "narration": "This change adds per-key rate limiting to the public API. A token-bucket limiter lives in a new module, and the request middleware consults it before dispatch, returning 429 when a key exhausts its budget."
+    },
+    {
+      "id": "c02",
+      "title": "The TokenBucket type",
+      "action": "zoom",
+      "file": "api/rate_limit.py",
+      "focus": { "start": 8, "end": 24, "anchor": "class TokenBucket:" },
+      "narration": "TokenBucket holds a capacity, a refill rate, and the last refill timestamp. Each call to take refills the bucket proportionally to elapsed time, then spends one token if available."
+    },
+    {
+      "id": "c03",
+      "title": "Per-key bucket registry",
+      "action": "scroll",
+      "file": "api/rate_limit.py",
+      "focus": { "start": 27, "end": 41, "anchor": "class RateLimiter:" },
+      "narration": "RateLimiter maps each API key to its bucket, creating one on first sight. The registry is a plain dict guarded by a lock, sized for a single-process deployment."
+    },
+    {
+      "id": "c04",
+      "title": "Wiring into the middleware",
+      "action": "show",
+      "file": "api/app.py",
+      "focus": { "start": 31, "end": 44, "anchor": "@app.middleware(\"http\")" },
+      "narration": "The HTTP middleware extracts the API key header and asks the limiter for a token. A rejected request short-circuits with a 429 response carrying a Retry-After header."
+    },
+    {
+      "id": "c05",
+      "title": "Tests",
+      "action": "show",
+      "file": "tests/test_rate_limit.py",
+      "focus": { "start": 1, "end": 18, "anchor": "import time" },
+      "narration": "The tests freeze time to assert refill arithmetic, exhaust a bucket to check the 429 path, and verify that distinct keys draw from distinct buckets."
+    },
+    {
+      "id": "c06",
+      "title": "Wrap-up",
+      "action": "closing",
+      "file": null,
+      "focus": null,
+      "narration": "The API now enforces per-key budgets with a token bucket. Limits live in one module, wiring is a single middleware, and behavior is covered by time-controlled tests."
+    }
+  ]
+}
