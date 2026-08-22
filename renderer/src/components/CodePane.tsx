@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { continueRender, delayRender, interpolate, useCurrentFrame } from "remotion";
-import { focusIndexRange } from "../lib/diff";
+import { cancelRender, continueRender, delayRender, interpolate, useCurrentFrame } from "remotion";
+import { focusIndexRange, type LineKind } from "../lib/diff";
 import type { FileEntry, Focus } from "../lib/schema";
 import { highlightFile, type HighlightedLine } from "../lib/shiki";
 import { diffSide, LINE_H } from "../lib/timeline";
 
-const ROW_BG: Record<string, string> = {
+const ROW_BG: Record<LineKind, string> = {
   add: "rgba(46,160,67,0.18)",
   del: "rgba(248,81,73,0.18)",
   ctx: "transparent",
@@ -23,10 +23,12 @@ export const CodePane: React.FC<{
 
   useEffect(() => {
     let alive = true;
-    highlightFile(file).then((l) => {
-      if (alive) setLines(l);
-      continueRender(handle);
-    });
+    highlightFile(file)
+      .then((l) => {
+        if (alive) setLines(l);
+        continueRender(handle);
+      })
+      .catch((err) => cancelRender(err));
     return () => {
       alive = false;
     };
@@ -35,7 +37,7 @@ export const CodePane: React.FC<{
   if (!lines) return null;
 
   const side = diffSide(file.status);
-  const [a, b] = focus ? focusIndexRange(lines, focus, side) : [-1, -1];
+  const [a, b] = focus ? focusIndexRange(lines.map((l) => l.info), focus, side) : [-1, -1];
   const pulseAlpha = pulse
     ? interpolate(Math.sin(frame / 4), [-1, 1], [0.05, 0.3])
     : 0;
