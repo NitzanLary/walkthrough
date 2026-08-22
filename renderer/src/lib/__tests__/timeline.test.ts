@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { computeLineDiff } from "../diff";
-import { buildTimeline, cameraTarget, totalFrames, CODE_VIEW_H, LINE_H, diffSide, chapterTargets } from "../timeline";
+import {
+  buildTimeline, cameraTarget, totalFrames, CODE_VIEW_H, LINE_H, diffSide, chapterTargets,
+  CHAR_W, CODE_VIEW_W, GUTTER_W,
+} from "../timeline";
 
 const chapters = [
   { id: "c1", audio: { duration_ms: 1000 } },
@@ -41,9 +44,45 @@ describe("cameraTarget", () => {
   });
 
   it("single-line focus (start === end) clamps zoom scale to 2.2", () => {
-    // 1 line: scale = clamp(872 / (1 * 28 * 1.4), 1, 2.2) = clamp(22.24, 1, 2.2) = 2.2
+    // 1 line: clamp(868 / (1 * 28 * 1.4), 1, 2.2) = 2.2, then snapped down to the
+    // nearest scale that shows whole rows: 868 / (15 * 28) = 2.0667.
     const focus = { start: 50, end: 50, anchor: "l49" };
-    expect(cameraTarget(lines, focus, "zoom", "new").scale).toBe(2.2);
+    const s = cameraTarget(lines, focus, "zoom", "new").scale;
+    expect(s).toBeLessThanOrEqual(2.2);
+    expect(s).toBeCloseTo(CODE_VIEW_H / (15 * LINE_H));
+  });
+
+  it("zoom never scales past the width of the widest focused line", () => {
+    const long = "x".repeat(120);
+    const wide = computeLineDiff(
+      "",
+      Array.from({ length: 200 }, (_, i) => (i === 51 ? long : `l${i}`)).join("\n") + "\n",
+    );
+    const focus = { start: 50, end: 54, anchor: "l49" }; // includes the 120-char line
+    const { scale } = cameraTarget(wide, focus, "zoom", "new");
+    // The gutter scales with the text, so the whole row has to fit the window.
+    expect((GUTTER_W + long.length * CHAR_W) * scale).toBeLessThanOrEqual(CODE_VIEW_W);
+    // A narrow focus in the same file still gets the full height-driven zoom.
+    const narrow = cameraTarget(wide, { start: 60, end: 64, anchor: "l59" }, "zoom", "new");
+    expect(narrow.scale).toBeGreaterThan(scale);
+  });
+
+  it("scale and y land on whole rows so no line is sliced at an edge", () => {
+    const onGrid = (v: number, step: number) => Math.abs(v / step - Math.round(v / step));
+    for (const n of [1, 2, 5, 9, 14, 20, 30, 60]) {
+      for (const action of ["show", "zoom"] as const) {
+        const { y, scale } = cameraTarget(
+          lines,
+          { start: 50, end: 49 + n, anchor: "l49" },
+          action,
+          "new",
+        );
+        const step = LINE_H * scale;
+        // Whole rows fill the viewport, and the top edge sits on a row boundary.
+        expect(onGrid(CODE_VIEW_H, step)).toBeLessThan(1e-9);
+        expect(onGrid(y, step)).toBeLessThan(1e-9);
+      }
+    }
   });
 });
 
