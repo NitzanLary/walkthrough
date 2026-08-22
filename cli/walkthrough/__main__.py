@@ -1,5 +1,6 @@
 import json
 import shutil as _shutil
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -14,6 +15,7 @@ from .markdown import render_markdown
 from .narrator import cache as audio_cache
 from .narrator.base import MissingKeyError, get_narrator
 from .schema import AudioRef, Walkthrough
+from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
                        check_focus_ranges)
 
@@ -147,6 +149,55 @@ def narrate(
         cached_count += was_cached
     WT_JSON.write_text(wt.model_dump_json(indent=2))
     typer.echo(f"{len(results)}/{len(results)} clips, {cached_count} cached")
+
+
+def _staged_renderer() -> Path:
+    wt = _load_validated()
+    if any(ch.audio is None for ch in wt.chapters):
+        _fail(["chapters have no audio — run `walkthrough narrate` first"])
+    try:
+        require_node()
+    except ToolingMissing as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(4)
+    rd = stage_assets()
+    if not (rd / "node_modules").exists():
+        typer.echo(f"error: renderer dependencies missing — run `npm install` in {rd}",
+                   err=True)
+        raise typer.Exit(4)
+    return rd
+
+
+@app.command()
+def view() -> None:
+    """Stage assets and serve the player page on http://localhost:3000."""
+    rd = _staged_renderer()
+    typer.echo("player: http://localhost:3000")
+    subprocess.run(["npm", "run", "view"], cwd=rd)
+
+
+@app.command()
+def studio() -> None:
+    """Stage assets and launch Remotion Studio (dev only)."""
+    rd = _staged_renderer()
+    subprocess.run(["npx", "remotion", "studio"], cwd=rd)
+
+
+@app.command()
+def render(out: Path = typer.Option(Path(".walkthrough/out.mp4"), "--out")) -> None:
+    """Stage assets and render the MP4."""
+    rd = _staged_renderer()
+    res = subprocess.run(
+        ["npx", "remotion", "render", "Walkthrough", str(out.resolve())], cwd=rd)
+    raise typer.Exit(res.returncode)
+
+
+@app.command()
+def clean() -> None:
+    """Delete .walkthrough/."""
+    import shutil as sh
+    sh.rmtree(WT_JSON.parent, ignore_errors=True)
+    typer.echo("removed .walkthrough/")
 
 
 if __name__ == "__main__":
