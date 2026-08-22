@@ -1,0 +1,30 @@
+{
+  "name": "walkthrough-renderer",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "view": "vite --port 3000",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.515",
+    "@remotion/google-fonts": "4.0.515",
+    "@remotion/media": "4.0.515",
+    "@remotion/player": "4.0.515",
+    "diff": "^5.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.515",
+    "shiki": "^1.22.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/diff": "^5.2.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
+    "vitest": "^2.1.1"
+  }
+}
