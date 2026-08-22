@@ -8,7 +8,7 @@ import { LowerThird } from "./components/LowerThird";
 import { Overview } from "./components/Overview";
 import { Window } from "./components/Window";
 import type { Chapter, Walkthrough as WT } from "./lib/schema";
-import { buildTimeline, chapterTargets, type CameraTarget } from "./lib/timeline";
+import { buildTimeline, chapterTargets, dimFor, type CameraTarget } from "./lib/timeline";
 
 const CodeChapter: React.FC<{
   data: WT;
@@ -23,7 +23,7 @@ const CodeChapter: React.FC<{
         <CodePane
           file={file}
           focus={chapter.focus ?? null}
-          dim={chapter.action === "zoom"}
+          dim={dimFor(chapter.action)}
           pulse={chapter.action === "highlight"}
         />
       </Camera>

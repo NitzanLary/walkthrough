@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeLineDiff } from "../diff";
 import {
   buildTimeline, cameraTarget, totalFrames, CODE_VIEW_H, LINE_H, diffSide, chapterTargets,
-  CHAR_W, CODE_VIEW_W, GUTTER_W,
+  CHAR_W, CODE_VIEW_W, GUTTER_W, CONTEXT_LINES, SHOW_MAX_SCALE, dimFor, maxScaleForWidth,
 } from "../timeline";
 
 const chapters = [
@@ -22,12 +22,41 @@ describe("buildTimeline", () => {
 describe("cameraTarget", () => {
   const lines = computeLineDiff("", Array.from({ length: 200 }, (_, i) => `l${i}`).join("\n") + "\n");
 
-  it("scale is 1 for show and clamped <= 2.2 for zoom", () => {
+  it("show frames the focus but stays below the zoom cap", () => {
     const focus = { start: 50, end: 54, anchor: "l49" };
-    expect(cameraTarget(lines, focus, "show", "new").scale).toBe(1);
+    const s = cameraTarget(lines, focus, "show", "new").scale;
+    expect(s).toBeGreaterThan(1);
+    expect(s).toBeLessThanOrEqual(SHOW_MAX_SCALE);
     const z = cameraTarget(lines, focus, "zoom", "new").scale;
-    expect(z).toBeGreaterThan(1);
+    expect(z).toBeGreaterThan(s); // zoom is still the stronger move
     expect(z).toBeLessThanOrEqual(2.2);
+  });
+
+  it("show keeps CONTEXT_LINES rows of context around the focus", () => {
+    const focus = { start: 50, end: 62, anchor: "l49" }; // 13 lines, like c04
+    const { scale } = cameraTarget(lines, focus, "show", "new");
+    const visible = CODE_VIEW_H / (LINE_H * scale);
+    expect(visible).toBeGreaterThanOrEqual(13 + CONTEXT_LINES - 1);
+    expect(visible).toBeLessThan(13 + CONTEXT_LINES + LINE_H);
+  });
+
+  it("a focus line too wide for scale 1 does not block framing", () => {
+    // 209 chars cannot fit at any scale >= 1, so the width cap steps aside
+    // rather than pinning the chapter at scale 1 (real case: examples/small.json).
+    const huge = "x".repeat(209);
+    const withHuge = computeLineDiff(
+      "",
+      Array.from({ length: 200 }, (_, i) => (i === 55 ? huge : `l${i}`)).join("\n") + "\n",
+    );
+    expect(maxScaleForWidth(209)).toBeLessThan(1);
+    const { scale } = cameraTarget(withHuge, { start: 50, end: 62, anchor: "l49" }, "show", "new");
+    expect(scale).toBeGreaterThan(1);
+  });
+
+  it("dimFor separates the actions", () => {
+    expect(dimFor("zoom")).toBeLessThan(dimFor("show"));
+    expect(dimFor("show")).toBeLessThan(1);
+    expect(dimFor("highlight")).toBe(1);
   });
 
   it("zoom scale follows clamp(viewportH / (focusLines * 28 * 1.4), 1, 2.2)", () => {
@@ -40,7 +69,7 @@ describe("cameraTarget", () => {
     const top = cameraTarget(lines, { start: 1, end: 2, anchor: "l0" }, "show", "new");
     expect(top.y).toBe(0);
     const bottom = cameraTarget(lines, { start: 199, end: 200, anchor: "l198" }, "show", "new");
-    expect(bottom.y).toBe(CODE_VIEW_H - lines.length * LINE_H);
+    expect(bottom.y).toBeCloseTo(CODE_VIEW_H - lines.length * LINE_H * bottom.scale);
   });
 
   it("single-line focus (start === end) clamps zoom scale to 2.2", () => {

@@ -14,7 +14,7 @@ const ROW_BG: Record<LineKind, string> = {
 export const CodePane: React.FC<{
   file: FileEntry;
   focus: Focus | null;
-  dim: boolean;    // true under zoom: non-focused lines at 0.35
+  dim: number;     // opacity of the rows outside the focus range (1 = no dim)
   pulse: boolean;  // true under highlight: focus rows pulse
 }> = ({ file, focus, dim, pulse }) => {
   const frame = useCurrentFrame();
@@ -38,6 +38,8 @@ export const CodePane: React.FC<{
 
   const side = diffSide(file.status);
   const [a, b] = focus ? focusIndexRange(lines.map((l) => l.info), focus, side) : [-1, -1];
+  // With no focus range there is nothing to dim against — every row is equal.
+  const dimOpacity = focus ? dim : 1;
   const pulseAlpha = pulse
     ? interpolate(Math.sin(frame / 4), [-1, 1], [0.05, 0.3])
     : 0;
@@ -54,7 +56,7 @@ export const CodePane: React.FC<{
               backgroundColor: pulse && inFocus
                 ? `rgba(88,166,255,${pulseAlpha})`
                 : ROW_BG[line.info.kind],
-              opacity: dim && !inFocus ? 0.35 : 1,
+              opacity: inFocus ? 1 : dimOpacity,
               borderLeft: inFocus ? "3px solid #58a6ff" : "3px solid transparent",
             }}
           >
