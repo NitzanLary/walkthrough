@@ -20,15 +20,25 @@ export const AudioSchema = z.object({
   duration_ms: z.number().int().positive(),
 });
 
-export const ChapterSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  action: z.enum(["overview", "show", "scroll", "zoom", "highlight", "closing"]),
-  file: z.string().nullish(),
-  focus: FocusSchema.nullish(),
-  narration: z.string(),
-  audio: AudioSchema,
-});
+export const ChapterSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    action: z.enum(["overview", "show", "scroll", "zoom", "highlight", "closing"]),
+    file: z.string().nullish(),
+    focus: FocusSchema.nullish(),
+    narration: z.string(),
+    audio: AudioSchema,
+  })
+  .superRefine((ch, ctx) => {
+    const bookend = ch.action === "overview" || ch.action === "closing";
+    if (bookend && (ch.file != null || ch.focus != null)) {
+      ctx.addIssue({ code: "custom", message: `${ch.id}: ${ch.action} chapters carry no file/focus` });
+    }
+    if (!bookend && (ch.file == null || ch.focus == null)) {
+      ctx.addIssue({ code: "custom", message: `${ch.id}: ${ch.action} chapters require file and focus` });
+    }
+  });
 
 export const WalkthroughSchema = z.object({
   version: z.literal(1),

@@ -2,10 +2,11 @@ import React from "react";
 import { Audio } from "@remotion/media";
 import { AbsoluteFill, Sequence, staticFile, useVideoConfig } from "remotion";
 import { Camera } from "./components/Camera";
+import { Closing } from "./components/Closing";
 import { CodePane } from "./components/CodePane";
 import { LowerThird } from "./components/LowerThird";
+import { Overview } from "./components/Overview";
 import { Window } from "./components/Window";
-import { CODE_FONT } from "./lib/font";
 import type { Chapter, Walkthrough as WT } from "./lib/schema";
 import { buildTimeline, chapterTargets, type CameraTarget } from "./lib/timeline";
 
@@ -47,14 +48,10 @@ export const Walkthrough: React.FC<{ data: WT }> = ({ data }) => {
         return (
           <Sequence key={ch.id} from={t.from} durationInFrames={t.durationInFrames}>
             <Audio src={staticFile(ch.audio.path)} />
-            {ch.action === "overview" || ch.action === "closing" ? (
-              <AbsoluteFill
-                style={{ justifyContent: "center", alignItems: "center",
-                         color: "#ccc", fontFamily: CODE_FONT,
-                         fontSize: 48 }}
-              >
-                {ch.action === "overview" ? data.meta.title : "fin"}
-              </AbsoluteFill>
+            {ch.action === "overview" ? (
+              <Overview data={data} />
+            ) : ch.action === "closing" ? (
+              <Closing chapter={ch} />
             ) : (
               <CodeChapter data={data} chapter={ch} prev={prev} target={targets[i]!} />
             )}
