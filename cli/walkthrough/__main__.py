@@ -1,14 +1,19 @@
 import json
+import shutil as _shutil
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from . import WT_JSON
+from . import AUDIO_DIR, WT_JSON
 from .git import fill_contents
 from .markdown import render_markdown
-from .schema import Walkthrough
+from .narrator import cache as audio_cache
+from .narrator.base import MissingKeyError, get_narrator
+from .schema import AudioRef, Walkthrough
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
                        check_focus_ranges)
 
@@ -77,6 +82,71 @@ def markdown() -> None:
     out = WT_JSON.parent / "walkthrough.md"
     out.write_text(render_markdown(wt))
     typer.echo(str(out))
+
+
+@app.command()
+def narrate(
+    no_cache: bool = typer.Option(False, "--no-cache", help="Force re-synthesis"),
+    jobs: int = typer.Option(4, "-j", "--jobs", help="Parallel synthesis pool"),
+) -> None:
+    """Synthesize narration; fills chapters[].audio."""
+    load_dotenv()  # the README promises TTS_* via .env
+    wt = _load_validated()
+    try:
+        narrator = get_narrator()
+    except (MissingKeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(3)
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    cached_count = 0
+    # Request-stitching context: neighbors' narration keeps tone continuous.
+    stitch = {
+        ch.id: (wt.chapters[i - 1].narration if i > 0 else "",
+                wt.chapters[i + 1].narration if i + 1 < len(wt.chapters) else "")
+        for i, ch in enumerate(wt.chapters)
+    }
+
+    def one(ch) -> tuple[str, AudioRef, bool]:
+        out = AUDIO_DIR / f"{ch.id}.mp3"
+        prev_text, next_text = stitch[ch.id]
+        key = audio_cache.cache_key(narrator.provider, narrator.model,
+                                    narrator.voice_id, ch.narration,
+                                    previous_text=prev_text, next_text=next_text)
+        if not no_cache and (hit := audio_cache.lookup(key)) is not None:
+            _shutil.copy2(hit.path, out)
+            return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
+                                   duration_ms=hit.duration_ms), True
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                clip = narrator.synthesize(ch.narration, out,
+                                           previous_text=prev_text,
+                                           next_text=next_text)
+                break
+            except Exception as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+        else:
+            raise RuntimeError(f"chapter {ch.id}: synthesis failed after 3 attempts: {last_err}")
+        audio_cache.store(key, clip.path, clip.duration_ms)
+        return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
+                               duration_ms=clip.duration_ms), False
+
+    try:
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            results = list(pool.map(one, wt.chapters))
+    except RuntimeError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(3)
+
+    by_id = {r[0]: r for r in results}
+    for ch in wt.chapters:
+        _, ref, was_cached = by_id[ch.id]
+        ch.audio = ref
+        cached_count += was_cached
+    WT_JSON.write_text(wt.model_dump_json(indent=2))
+    typer.echo(f"{len(results)}/{len(results)} clips, {cached_count} cached")
 
 
 if __name__ == "__main__":
