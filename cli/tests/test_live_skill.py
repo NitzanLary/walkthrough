@@ -1,6 +1,6 @@
 """Opt-in live test: RUN_LIVE=1 LIVE_REPO=/path LIVE_BASE=main pytest -k live.
-Asserts structural properties only — content quality is judged by the human
-evaluation in docs/evaluation.md."""
+Asserts structural properties only — content quality is judged by a human
+watching the result."""
 import json
 import os
 import shutil
