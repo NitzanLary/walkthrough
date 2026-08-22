@@ -3,6 +3,7 @@ Asserts structural properties only — content quality is judged by the human
 evaluation in docs/evaluation.md."""
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,8 +14,12 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_skill_produces_valid_plan_within_budget():
-    repo = Path(os.environ["LIVE_REPO"])
+    repo_env = os.environ.get("LIVE_REPO")
+    if not repo_env:
+        pytest.skip("LIVE_REPO not set")
+    repo = Path(repo_env)
     base = os.environ.get("LIVE_BASE", "main")
+    shutil.rmtree(repo / ".walkthrough", ignore_errors=True)
     subprocess.run(
         ["claude", "-p", f"/walkthrough --base {base}", "--dangerously-skip-permissions"],
         cwd=repo, timeout=900, check=True)

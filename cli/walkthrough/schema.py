@@ -92,6 +92,23 @@ class Walkthrough(BaseModel):
     files: list[FileEntry]
     chapters: list[Chapter]
 
+    @model_validator(mode="after")
+    def _unique_ids_and_paths(self) -> "Walkthrough":
+        errors: list[str] = []
+        seen_ids: set[str] = set()
+        for c in self.chapters:
+            if c.id in seen_ids:
+                errors.append(f"chapters[]: duplicate id '{c.id}'")
+            seen_ids.add(c.id)
+        seen_paths: set[str] = set()
+        for f in self.files:
+            if f.path in seen_paths:
+                errors.append(f"files[]: duplicate path '{f.path}'")
+            seen_paths.add(f.path)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
 
 if __name__ == "__main__":
     print(json.dumps(Walkthrough.model_json_schema(), indent=2))

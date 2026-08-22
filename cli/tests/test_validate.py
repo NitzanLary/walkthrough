@@ -132,3 +132,22 @@ def test_cli_validate_numbered_errors_exit_2(repo):
                          capture_output=True, text=True)
     assert res.returncode == 2
     assert "1. " in res.stderr
+
+
+def test_cli_validate_duplicate_chapter_id_exits_2(repo):
+    base = commit_file(repo, "greet.py", "")
+    head = commit_file(repo, "greet.py", AFTER)
+    p = make_plan()
+    p["meta"]["base_sha"], p["meta"]["head_sha"] = base, head
+    p["files"][0] = {"path": "greet.py", "language": None, "status": "modified",
+                     "old_path": None, "before": None, "after": None}
+    p["chapters"][1]["focus"] = {"start": 4, "end": 5, "anchor": "def greet(name):"}
+    p["chapters"][2]["id"] = p["chapters"][0]["id"]
+    wtdir = repo / ".walkthrough"
+    wtdir.mkdir()
+    (wtdir / "walkthrough.json").write_text(json.dumps(p))
+
+    res = subprocess.run(["walkthrough", "validate"], cwd=repo,
+                         capture_output=True, text=True)
+    assert res.returncode == 2
+    assert "duplicate id 'c01'" in res.stderr

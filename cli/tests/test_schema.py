@@ -76,6 +76,21 @@ def test_renamed_requires_old_path():
         Walkthrough.model_validate(p)
 
 
+def test_duplicate_chapter_ids_rejected():
+    p = make_plan()
+    p["chapters"][2]["id"] = p["chapters"][0]["id"]
+    with pytest.raises(ValidationError, match="duplicate id 'c01'"):
+        Walkthrough.model_validate(p)
+
+
+def test_duplicate_file_paths_rejected():
+    p = make_plan()
+    p["files"].append({"path": "greet.py", "language": "python", "status": "added",
+                        "old_path": None, "before": None, "after": None})
+    with pytest.raises(ValidationError, match="duplicate path 'greet.py'"):
+        Walkthrough.model_validate(p)
+
+
 def test_schema_json_in_sync_with_models():
     emitted = Walkthrough.model_json_schema()
     on_disk = json.loads((REPO / "skills/walkthrough/schema.json").read_text())
