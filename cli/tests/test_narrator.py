@@ -60,11 +60,6 @@ def test_get_narrator_missing_key(monkeypatch):
         get_narrator()
 
 
-@pytest.mark.xfail(
-    reason="ElevenLabsNarrator ships in Task 15; this exercises the key "
-           "fallback resolution but the provider module doesn't exist yet",
-    strict=True, raises=ModuleNotFoundError,
-)
 def test_get_narrator_accepts_provider_specific_key(monkeypatch):
     monkeypatch.setenv("TTS_PROVIDER", "elevenlabs")
     monkeypatch.delenv("TTS_API_KEY", raising=False)
