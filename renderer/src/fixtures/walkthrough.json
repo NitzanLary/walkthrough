@@ -50,7 +50,7 @@
       "file": "api/rate_limit.py",
       "focus": { "start": 5, "end": 20, "anchor": "class TokenBucket:" },
       "narration": "TokenBucket refills proportionally to elapsed time, then spends one token if available.",
-      "audio": { "path": "audio/c02.mp3", "duration_ms": 5200 }
+      "audio": { "path": "audio/c02.mp3", "duration_ms": 4800 }
     },
     {
       "id": "c03", "title": "Per-key registry", "action": "scroll",
@@ -71,7 +71,7 @@
       "file": "api/legacy_throttle.py",
       "focus": { "start": 6, "end": 11, "anchor": "def crude_throttle(key: str) -> bool:" },
       "narration": "The crude one-request-per-second throttle is deleted in favor of the bucket.",
-      "audio": { "path": "audio/c05.mp3", "duration_ms": 4800 }
+      "audio": { "path": "audio/c05.mp3", "duration_ms": 4400 }
     },
     {
       "id": "c06", "title": "Wrap-up", "action": "closing",
