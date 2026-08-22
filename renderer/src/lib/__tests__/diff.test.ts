@@ -39,4 +39,11 @@ describe("focusIndexRange", () => {
     expect(focusIndexRange(lines, { start: 1, end: 2, anchor: "x" }, "old"))
       .toEqual([0, 1]);
   });
+
+  it("fallback: when focus.end has no matching line number, end index falls back to start index", () => {
+    const lines = computeLineDiff("a\nb\nc\n", "a\nB\nc\n");
+    // focus.end = 999 doesn't exist, so it should return [a, a]
+    expect(focusIndexRange(lines, { start: 2, end: 999, anchor: "B" }, "new"))
+      .toEqual([2, 2]);
+  });
 });
