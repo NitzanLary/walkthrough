@@ -8,3 +8,6 @@ renderer/public/walkthrough.json
 renderer/public/audio/
 renderer/out/
 .env
+
+# local Claude Code project config
+.claude/
