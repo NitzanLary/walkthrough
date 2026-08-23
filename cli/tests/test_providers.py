@@ -3,17 +3,20 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 
+from walkthrough.narrator.base import RateLimited
 from walkthrough.narrator.elevenlabs import ElevenLabsNarrator
 from walkthrough.narrator.openai import OpenAINarrator
 
 
 class FakeResponse:
-    def __init__(self, json_data=None, content=b""):
+    def __init__(self, json_data=None, content=b"", status_code=200, text="",
+                 headers=None):
         self._json, self.content = json_data, content
-
-    def raise_for_status(self):
-        pass
+        self.status_code, self.text = status_code, text
+        self.headers = headers or {}
+        self.is_success = 200 <= status_code < 300
 
     def json(self):
         return self._json
@@ -75,6 +78,21 @@ def test_elevenlabs_omits_empty_stitch_context(tmp_path, monkeypatch):
     ElevenLabsNarrator(api_key="k").synthesize("x", tmp_path / "c.mp3")
     body = seen["kwargs"]["json"]
     assert "previous_text" not in body and "next_text" not in body
+
+
+def test_provider_429_surfaces_as_rate_limited(tmp_path, monkeypatch):
+    """Both narrators must classify a 429 rather than raising a bare HTTP error,
+    or narrate cannot tell 'slow down' from 'this request is wrong'."""
+    def fake_post(url, **kwargs):
+        return FakeResponse(status_code=429, text="too many concurrent requests",
+                            headers={"retry-after": "3"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    for narrator in (ElevenLabsNarrator(api_key="k"), OpenAINarrator(api_key="k")):
+        with pytest.raises(RateLimited) as e:
+            narrator.synthesize("hi", tmp_path / "c.mp3")
+        assert e.value.retry_after == 3.0
+        assert "too many concurrent requests" in str(e.value)
 
 
 def test_openai_duration_via_mutagen(tmp_path, monkeypatch):

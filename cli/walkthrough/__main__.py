@@ -1,6 +1,8 @@
 import json
+import os
 import shutil as _shutil
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -13,13 +15,16 @@ from . import AUDIO_DIR, WT_JSON
 from .git import fill_contents
 from .markdown import render_markdown
 from .narrator import cache as audio_cache
-from .narrator.base import MissingKeyError, get_narrator
+from .narrator.base import MissingKeyError, RateLimited, get_narrator
 from .schema import AudioRef, Walkthrough
 from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
                        check_focus_ranges)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
+
+# Rate-limit waits burn attempts too, so leave room for a few before giving up.
+_MAX_ATTEMPTS = 5
 
 
 @app.callback()
@@ -89,11 +94,15 @@ def markdown() -> None:
 @app.command()
 def narrate(
     no_cache: bool = typer.Option(False, "--no-cache", help="Force re-synthesis"),
-    jobs: int = typer.Option(4, "-j", "--jobs", help="Parallel synthesis pool"),
+    jobs: int = typer.Option(2, "-j", "--jobs", help="Parallel synthesis pool"),
 ) -> None:
     """Synthesize narration; fills chapters[].audio."""
     load_dotenv()  # the README promises TTS_* via .env
     wt = _load_validated()
+    # A 429 flips the whole run to serial rather than retrying into the same
+    # wall: the provider is rejecting the concurrency, not the request.
+    _serialized = threading.Event()
+    _serial_lock = threading.Lock()
     try:
         narrator = get_narrator()
     except (MissingKeyError, ValueError) as e:
@@ -119,18 +128,33 @@ def narrate(
             return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
                                    duration_ms=hit.duration_ms), True
         last_err: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(_MAX_ATTEMPTS):
             try:
-                clip = narrator.synthesize(ch.narration, out,
-                                           previous_text=prev_text,
-                                           next_text=next_text)
+                if _serialized.is_set():
+                    # A 429 already told us the pace is wrong: one at a time.
+                    with _serial_lock:
+                        clip = narrator.synthesize(ch.narration, out,
+                                                   previous_text=prev_text,
+                                                   next_text=next_text)
+                else:
+                    clip = narrator.synthesize(ch.narration, out,
+                                               previous_text=prev_text,
+                                               next_text=next_text)
                 break
+            except RateLimited as e:
+                last_err = e
+                if not _serialized.is_set():
+                    _serialized.set()
+                    typer.echo("rate limited by provider — continuing one at a time",
+                               err=True)
+                time.sleep(e.retry_after if e.retry_after is not None else 2 ** attempt)
             except Exception as e:
                 last_err = e
-                if attempt < 2:
+                if attempt < _MAX_ATTEMPTS - 1:
                     time.sleep(2 ** attempt)
         else:
-            raise RuntimeError(f"chapter {ch.id}: synthesis failed after 3 attempts: {last_err}")
+            raise RuntimeError(
+                f"chapter {ch.id}: synthesis failed after {_MAX_ATTEMPTS} attempts: {last_err}")
         audio_cache.store(key, clip.path, clip.duration_ms)
         return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
                                duration_ms=clip.duration_ms), False
@@ -183,12 +207,61 @@ def studio() -> None:
     subprocess.run(["npx", "remotion", "studio"], cwd=rd)
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by someone else
+    return True
+
+
+def _claim_output(final: Path) -> Path:
+    """Take the lock on `final`, refusing to start if a live render holds it.
+
+    Two renders writing one path interleave into a file that looks valid and
+    is not, so the second one must not start rather than lose the race.
+    """
+    lock = final.with_name(final.name + ".lock")
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return lock
+        except FileExistsError:
+            try:
+                holder = int(lock.read_text().strip())
+            except (ValueError, OSError):
+                holder = None
+            if holder is not None and holder != os.getpid() and _pid_alive(holder):
+                typer.echo(f"error: another render (pid {holder}) is writing {final} — "
+                           f"wait for it, or use --out to write elsewhere", err=True)
+                raise typer.Exit(4)
+            lock.unlink(missing_ok=True)  # stale: owner died without cleaning up
+    raise typer.Exit(4)
+
+
 @app.command()
 def render(out: Path = typer.Option(Path(".walkthrough/out.mp4"), "--out")) -> None:
     """Stage assets and render the MP4."""
     rd = _staged_renderer()
-    res = subprocess.run(
-        ["npx", "remotion", "render", "Walkthrough", str(out.resolve())], cwd=rd)
+    final = out.resolve()
+    final.parent.mkdir(parents=True, exist_ok=True)
+    lock = _claim_output(final)
+    # Render beside the target and move it into place only on success, so a
+    # failed or killed render leaves the previous MP4 intact.
+    tmp = final.with_name(f".{final.stem}.{os.getpid()}.tmp{final.suffix}")
+    try:
+        res = subprocess.run(
+            ["npx", "remotion", "render", "Walkthrough", str(tmp)], cwd=rd)
+        if res.returncode == 0:
+            tmp.replace(final)
+            typer.echo(str(final))
+    finally:
+        tmp.unlink(missing_ok=True)
+        lock.unlink(missing_ok=True)
     raise typer.Exit(res.returncode)
 
 

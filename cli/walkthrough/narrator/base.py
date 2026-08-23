@@ -27,6 +27,45 @@ class MissingKeyError(Exception):
         super().__init__(f"missing environment variable {var_name}")
 
 
+class ProviderError(Exception):
+    """A provider call failed. Carries the API's own explanation, which is the
+    only place the actual reason appears (bad voice id, quota, model name...)."""
+
+
+class RateLimited(ProviderError):
+    """HTTP 429. Distinct because it means 'slow down', not 'this failed'."""
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        self.retry_after = retry_after
+        super().__init__(message)
+
+
+def check_response(r) -> None:
+    """raise_for_status with the response body attached.
+
+    httpx's own message is just the status line, so a 429 for a concurrency
+    limit and a 429 for an exhausted quota look identical — and they need
+    opposite responses from the caller.
+    """
+    if r.is_success:
+        return
+    detail = (r.text or "").strip().replace("\n", " ")
+    if len(detail) > 300:
+        detail = detail[:300] + "…"
+    message = f"HTTP {r.status_code}" + (f": {detail}" if detail else "")
+    if r.status_code == 429:
+        raise RateLimited(message, _retry_after(r.headers.get("retry-after")))
+    raise ProviderError(message)
+
+
+def _retry_after(value: str | None) -> float | None:
+    """Seconds form only; a HTTP-date Retry-After falls back to our own backoff."""
+    try:
+        return float(value) if value else None
+    except ValueError:
+        return None
+
+
 # Provider-specific key env vars accepted when TTS_API_KEY is unset — the
 # official ElevenLabs/OpenAI setup flows write these names into .env.
 _KEY_FALLBACK = {"elevenlabs": "ELEVENLABS_API_KEY", "openai": "OPENAI_API_KEY"}

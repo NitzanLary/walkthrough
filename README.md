@@ -26,7 +26,13 @@ Create `.env` in the repo you review:
 
 Commands: `validate` · `markdown` · `narrate [--no-cache] [-j N]` · `view` ·
 `studio` · `render [--out PATH]` · `clean`.
-Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 tooling missing.
+Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 environment
+problem (tooling missing, or another render already holds the output path).
+
+`narrate` synthesizes 2 chapters at a time; a 429 from the provider drops the
+run to one at a time and honors `Retry-After` rather than failing the chapter.
+`render` writes to a temp file and moves it into place only on success, so a
+failed or interrupted render leaves the previous MP4 intact.
 
 Artifacts land in `./.walkthrough/` (add it to your repo's ignores).
 Audio is cached at `~/.cache/walkthrough/audio/` keyed by provider, model,

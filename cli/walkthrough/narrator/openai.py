@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 from mutagen.mp3 import MP3
 
-from .base import Clip
+from .base import Clip, check_response
 
 
 class OpenAINarrator:
@@ -28,7 +28,7 @@ class OpenAINarrator:
                   "input": text, "response_format": "mp3"},
             timeout=120,
         )
-        r.raise_for_status()
+        check_response(r)
         out.write_bytes(r.content)
         duration_ms = round(MP3(out).info.length * 1000)
         return Clip(path=out, duration_ms=duration_ms)

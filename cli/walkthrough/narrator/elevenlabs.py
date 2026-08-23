@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from .base import Clip
+from .base import Clip, check_response
 
 
 # Defaults follow the official ElevenLabs skill: multilingual_v2 for
@@ -44,7 +44,7 @@ class ElevenLabsNarrator:
             json=body,
             timeout=120,
         )
-        r.raise_for_status()
+        check_response(r)
         data = r.json()
         out.write_bytes(base64.b64decode(data["audio_base64"]))
         alignment = data["alignment"]

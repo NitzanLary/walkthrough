@@ -70,9 +70,11 @@ There is no system `ffmpeg`/`ffprobe` — use `npx remotion ffprobe` / `npx remo
 user has asked for it in this session.** Use `TTS_PROVIDER=fake` for any pipeline work — it
 produces realistic timings without spending.
 
-- ElevenLabs 429s at the default `-j 4`. Use `-j 1`.
 - Never print or log API keys. `.env` is gitignored; keep it that way.
 - Cached clips are keyed by provider, model, voice, and stitch context, so a failed run doesn't re-bill what already succeeded.
+- A 429 drops the run to one request at a time and honors `Retry-After`; provider errors carry
+  the API's own message, which is the only place "concurrency limit" and "quota exhausted" are
+  distinguishable. Don't paper over a 429 by lowering `-j` — the handling is the fix.
 
 ## Camera invariants
 
@@ -95,9 +97,13 @@ Both camera bugs found in this repo looked fine in the code and were obvious in 
 
 ## Renders
 
-A full render is ~13k frames and ~20 minutes. `render` writes `.walkthrough/out.mp4` with no
-lock, so run one at a time — two concurrent renders corrupt the output. Kill renders by PID;
-`pkill -f remotion` has silently failed here and let a stale render finish over a live one.
+A full render is ~13k frames and ~20 minutes. It renders to a temp file beside the target and
+moves it into place on success, holding `<out>.lock` for the duration — a second render exits 4
+rather than corrupting the first one's output. A killed render leaves a stale lock, which the
+next run takes over once it sees the owning PID is gone.
+
+Kill renders by PID. `pkill -f remotion` has silently failed here and let a stale render run to
+completion over a live one's output — the bug the lock now prevents.
 
 ## Repo hygiene
 
