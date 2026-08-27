@@ -70,6 +70,17 @@ There is no system `ffmpeg`/`ffprobe` — use `npx remotion ffprobe` / `npx remo
 user has asked for it in this session.** Use `TTS_PROVIDER=fake` for any pipeline work — it
 produces realistic timings without spending.
 
+**Reverting a fix to prove a test catches it re-arms the bug.** Issue #22 was the CLI reading
+`.env` from where the package is installed rather than from the working repo. Stashing that fix
+and re-running the suite made the old code find this repo's own `.env` — `TTS_PROVIDER=elevenlabs`
+and a live key — and one test billed three clips. Before running knowingly-broken code, ask what
+the bug reaches for. If it is credentials, a network call, or a real path, prove the fix by
+asserting on the resolution logic instead, or force `TTS_PROVIDER=fake` in the process
+environment where a stale `.env` cannot outvote it.
+
+Tests must run with `cwd` inside a temp repo. `.env` now resolves from cwd then the git root, so a
+test that does not chdir reads *this* repo's `.env` and the real key with it.
+
 - Never print or log API keys. `.env` is gitignored; keep it that way.
 - Cached clips are keyed by provider, model, voice, and stitch context, so a failed run doesn't re-bill what already succeeded.
 - A 429 drops the run to one request at a time and honors `Retry-After`; provider errors carry
