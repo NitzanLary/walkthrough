@@ -19,7 +19,7 @@ from .narrator.base import MissingKeyError, RateLimited, get_narrator
 from .schema import AudioRef, Walkthrough
 from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
-                       check_focus_ranges)
+                       check_focus_ranges, check_narration_budget)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -94,6 +94,7 @@ def validate() -> None:
         errors += anchor_errors
         errors += check_focus_ranges(wt)
         errors += check_chapter_order(wt)
+        warnings += check_narration_budget(wt)
     for msg in warnings:
         typer.echo(f"warning: {msg}")
     if errors:

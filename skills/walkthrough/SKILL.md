@@ -44,20 +44,23 @@ Schema: `schema.json` (next to this file). Worked examples: `examples/small.json
    5. Tests, grouped; describe what they assert, not line by line
    6. Incidental changes (renames, cleanup) as one combined chapter
 
-5. **Compress to the budget.** Estimate ~2.5 narrated words per second. Merge
+5. **Compress to the budget.** Estimate ~2.3 narrated words per second (435 ms
+   per word — the measured voice, which runs slower than the nominal rate). Merge
    repetitive hunks into one chapter and name the pattern. Never narrate line by
    line; explain purpose, inputs, outputs, side effects.
 
 6. **Camera.** `overview` first, `closing` last. `show` on first visit to a
    file; `zoom` for the 3–5 most important regions; `scroll` for sequential
    movement within a file; `highlight` for quick callbacks. Focus span ≤ 60
-   lines — split if larger. Keep any single chapter's narration ≤ ~25 s; split
+   lines — split if larger, and ≤ 20 lines for a `zoom`: a taller focus cannot
+   fill the frame, so the shot reads as a `show`. Keep any single chapter's
+   narration ≤ ~25 s — at 2.3 words/second that is ≤ 57 words, counted; split
    longer explanations into a zoom + scroll sequence rather than one static shot.
 
 7. **Voice.** Third person ("the change adds…", "this function…"). Declarative.
    No hedging words (probably, seems, might, appears). No filler. Never mention
-   the narrator, the tool, or the agent. 1–5 sentences per chapter, ≤ 45 words
-   per 10 seconds of speech.
+   the narrator, the tool, or the agent. 1–5 sentences per chapter, within the
+   ≤ 57-word chapter ceiling from step 6.
 
 8. **Write `.walkthrough/walkthrough.json`** conforming to the schema.
    - `focus.start`/`end` are 1-based inclusive, in *after* coordinates
@@ -68,9 +71,11 @@ Schema: `schema.json` (next to this file). Worked examples: `examples/small.json
    - `files[].old_path` is required when `status` is `renamed`.
 
 9. **Validate and fix.** Run `walkthrough validate`. Read its errors, fix the
-   JSON, rerun until it exits 0. Anchor drift is auto-corrected with a warning;
-   anchor ambiguity is an error — fix it by choosing a more distinctive focus
-   start line. Cap at 3 attempts, then report the remaining errors to the user.
+   JSON, rerun until it exits 0 with no warnings. Anchor drift is auto-corrected
+   with a warning; a narration-budget warning names a chapter to cut or split and
+   is not optional. Anchor ambiguity is an error — fix it by choosing a more
+   distinctive focus start line. Cap at 3 attempts, then report the remaining
+   errors to the user.
 
 10. **Hand off.** Run `walkthrough markdown`, then `walkthrough narrate`, then
     `walkthrough view`. Report the player URL, the markdown path, and the

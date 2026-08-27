@@ -33,10 +33,17 @@ export const GUTTER_W = 139;
 export const RIGHT_PAD = 16;
 // Rows of surrounding context a non-zoom action keeps in frame around its focus.
 export const CONTEXT_LINES = 8;
+// Rows of lead-in kept above a focus too tall to fit: the first focused row sits
+// near the top edge rather than flush against it.
+export const LEAD_LINES = 2;
 // Non-zoom actions frame the focus but stay well short of the zoom cap, so a
 // `zoom` chapter still reads as a distinct move.
 export const SHOW_MAX_SCALE = 1.6;
 export const ZOOM_MAX_SCALE = 2.2;
+// A focus tall enough to drive the height fit below 1 would leave `zoom` at scale
+// 1 — visually a `show`. Floor it so the move always reads as a zoom; the focus
+// then runs past the bottom edge, which the top-anchored framing below handles.
+export const ZOOM_MIN_SCALE = 1.25;
 
 /** Opacity of the rows outside the focus range, per camera action. */
 export function dimFor(action: Action): number {
@@ -99,11 +106,22 @@ export function cameraTarget(
   const byWidth = maxScaleForWidth(widestFocusLine(lines, a, b));
   const widthCap = byWidth >= 1 ? byWidth : Infinity;
   const maxScale = zooming ? ZOOM_MAX_SCALE : SHOW_MAX_SCALE;
-  const scale = snapScale(clamp(Math.min(byHeight, widthCap), 1, maxScale));
+  let fit = clamp(Math.min(byHeight, widthCap), 1, maxScale);
+  // The floor never overrides a width cap that *can* be met: pushing the focused
+  // code off the right edge is worse than a zoom that reads weakly.
+  if (zooming) fit = Math.min(Math.max(fit, ZOOM_MIN_SCALE), widthCap);
+  const scale = snapScale(fit);
 
   const focusTop = a * LINE_H;
   const focusH = focusLines * LINE_H;
-  let y = CODE_VIEW_H / 2 - (focusTop + focusH / 2) * scale;
+  // Deletions occupy rows that an after-file range does not count, so a focus can
+  // be taller than the frame well inside the 60-line authoring cap. Centring one
+  // opens the chapter below its own start line with the anchor off-screen, so pin
+  // the first focused row near the top instead and let the rest run past the
+  // bottom edge.
+  let y = focusH * scale > CODE_VIEW_H
+    ? (LEAD_LINES * LINE_H - focusTop) * scale
+    : CODE_VIEW_H / 2 - (focusTop + focusH / 2) * scale;
   const contentH = lines.length * LINE_H * scale;
   const minY = Math.min(0, CODE_VIEW_H - contentH);
   // Land the top edge on a row boundary, then clamp: both bounds are already
