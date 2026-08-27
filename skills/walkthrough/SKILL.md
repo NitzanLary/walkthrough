@@ -11,15 +11,22 @@ not hunt bugs, do not reassure.
 
 **Invocation:** `/walkthrough [--base REF] [--budget SECONDS]`
 `base` defaults to `main`. `budget` defaults to `clamp(changed_lines * 0.45, 60, 600)`
-seconds, where `changed_lines` = added + removed from `git diff <base>...HEAD --stat`.
+seconds, where `changed_lines` = `meta.stats.added + meta.stats.removed` — the
+part of the diff that survives step 3, not the raw `git diff <base>...HEAD --stat`
+total. Compute it once step 3 has settled which files are in.
 
 Schema: `schema.json` (next to this file). Worked examples: `examples/small.json`
 (~150-line diff), `examples/large.json` (~2k-line diff). Match their shape exactly.
 
 ## Procedure
 
-1. **Pin the snapshot.** Run `git status --porcelain`. If any file touched by
-   the diff is dirty, STOP and ask the user to commit first. Record
+1. **Pin the snapshot.** Run `git status --porcelain` and
+   `git diff --name-only <base>...HEAD`. If a path appears in both, STOP and ask
+   the user to commit or stash it: the CLI reads file content from the recorded
+   SHAs, so a dirty file inside the diff means it sees different lines than you
+   did and every anchor in that file lands on the wrong text. Dirty paths
+   *outside* the diff cannot reach the walkthrough — proceed, and name them at
+   hand-off so the user knows they were not part of it. Record
    `git merge-base <base> HEAD` as `meta.base_sha` and `git rev-parse HEAD` as
    `meta.head_sha`. Ensure `.walkthrough/` is ignored (add it to
    `.git/info/exclude` if not).
@@ -60,19 +67,56 @@ Schema: `schema.json` (next to this file). Worked examples: `examples/small.json
    per 10 seconds of speech.
 
 8. **Write `.walkthrough/walkthrough.json`** conforming to the schema.
+   - `meta.repo` is the repository directory name. `meta.base` is the `--base`
+     ref verbatim; `meta.head` is the current branch (`git rev-parse
+     --abbrev-ref HEAD`). The markdown header prints them as `base...head`.
+   - `meta.title` names the change: what the branch does, not which files it
+     touched, with no trailing period. It is the headline on the overview
+     slide, where ~45 characters fill the line and anything longer wraps.
+   - `meta.summary` is 2–3 sentences (≤ 230 characters, ~three lines on that
+     slide) in the step 7 voice: what the change does, plus the one design
+     decision worth knowing. It sits under the title while the overview
+     chapter's narration plays, so the two are read together — do not say the
+     same thing twice.
+   - `meta.stats` describes only what survived step 3: `files` is the length of
+     `files[]`, and `added`/`removed` are that subset's totals from
+     `git diff <base>...HEAD --numstat -- <those paths>`. Excluded paths go in
+     `meta.skipped` and must not be counted here — the budget is derived from
+     these numbers, and a lockfile counted in would blow it out.
+   - `meta.generated_at` is the current UTC time, ISO 8601 with a `Z` suffix.
    - `focus.start`/`end` are 1-based inclusive, in *after* coordinates
      (*before* coordinates for deleted files).
    - For every `focus`, set `anchor` to the verbatim text of line `start` —
-     copy it from the file with the Read tool, do not retype it.
+     copy it from the file with the Read tool, do not retype it. Leading and
+     trailing whitespace is ignored on both sides, so indentation need not be
+     reproduced; everything between must match exactly.
    - Do NOT include `files[].before/after` or `chapters[].audio`; the CLI fills those.
    - `files[].old_path` is required when `status` is `renamed`.
 
-9. **Validate and fix.** Run `walkthrough validate`. Read its errors, fix the
-   JSON, rerun until it exits 0. Anchor drift is auto-corrected with a warning;
-   anchor ambiguity is an error — fix it by choosing a more distinctive focus
-   start line. Cap at 3 attempts, then report the remaining errors to the user.
+9. **Validate and fix.** Probe the CLI first with `walkthrough --help`. If it is
+   not on PATH, stop here and report that the plan is written and that
+   `cd cli && pip install -e .` unlocks the rest — steps 9 and 10 are entirely
+   CLI work. Otherwise run `walkthrough validate`, read its errors, fix the
+   JSON, and rerun until it exits 0 (exit 2 is a validation failure). Cap at 3
+   attempts, then report the remaining errors to the user.
+
+   Focus line numbers do not have to be exact. When the anchor text matches
+   exactly one line within ±20 lines of `focus.start`, `validate` shifts `start`
+   and `end` by that delta, prints a `warning:`, and writes the corrected plan
+   back — that is the expected path, not something to pre-empt. Only two things
+   are errors: an anchor found nowhere in that window (wrong text, or a line
+   number off by more than 20), and an anchor matching several lines inside it.
+   Both are fixed by choosing a more distinctive start line — a `def`, `class`,
+   or decorator rather than a brace, a blank line, or a line that repeats
+   nearby. Author anchors for distinctiveness, not for line-number precision.
 
 10. **Hand off.** Run `walkthrough markdown`, then `walkthrough narrate`, then
     `walkthrough view`. Report the player URL, the markdown path, and the
-    chapter list. If narrate fails for lack of a TTS key, still report the
-    markdown path — it is a complete text walkthrough on its own.
+    chapter list. The three fail independently, so report what succeeded rather
+    than only the last error:
+    - `markdown` needs nothing beyond the validated plan.
+    - `narrate` exits 3 when no TTS key is configured. The markdown is a
+      complete text walkthrough on its own — still report its path.
+    - `view` exits 4 when Node is missing or the renderer has no
+      `node_modules`; its message names the fix. Report the markdown path and
+      omit the player URL.
