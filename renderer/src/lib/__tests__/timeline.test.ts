@@ -3,7 +3,7 @@ import { computeLineDiff, focusIndexRange } from "../diff";
 import {
   buildTimeline, cameraTarget, totalFrames, CODE_VIEW_H, LINE_H, diffSide, chapterTargets,
   CHAR_W, CODE_VIEW_W, GUTTER_W, CONTEXT_LINES, SHOW_MAX_SCALE, dimFor, maxScaleForWidth,
-  LEAD_LINES, ZOOM_MIN_SCALE,
+  LEAD_LINES, ZOOM_MIN_SCALE, WRAP_COLS,
 } from "../timeline";
 
 const chapters = [
@@ -41,17 +41,32 @@ describe("cameraTarget", () => {
     expect(visible).toBeLessThan(13 + CONTEXT_LINES + LINE_H);
   });
 
-  it("a focus line too wide for scale 1 does not block framing", () => {
-    // 209 chars cannot fit at any scale >= 1, so the width cap steps aside
-    // rather than pinning the chapter at scale 1 (real case: examples/small.json).
+  it("an over-wide line wraps instead of clipping, so the width cap always holds", () => {
+    // 209 chars fit at no scale >= 1, and the cap used to step aside and let the
+    // tail clip (real case: examples/small.json). It now becomes two rows.
     const huge = "x".repeat(209);
     const withHuge = computeLineDiff(
       "",
       Array.from({ length: 200 }, (_, i) => (i === 55 ? huge : `l${i}`)).join("\n") + "\n",
     );
     expect(maxScaleForWidth(209)).toBeLessThan(1);
+    // The widest row that can now exist still fits the window at scale 1.
+    expect(maxScaleForWidth(WRAP_COLS)).toBeGreaterThanOrEqual(1);
     const { scale } = cameraTarget(withHuge, { start: 50, end: 62, anchor: "l49" }, "show", "new");
-    expect(scale).toBeGreaterThan(1);
+    expect(scale * (GUTTER_W + WRAP_COLS * CHAR_W)).toBeLessThanOrEqual(CODE_VIEW_W);
+  });
+
+  it("a wrapped line contributes every one of its rows to the framing", () => {
+    const long = "x".repeat(WRAP_COLS * 3);
+    const wrapped = computeLineDiff(
+      "",
+      Array.from({ length: 200 }, (_, i) => (i === 51 ? long : `l${i}`)).join("\n") + "\n",
+    );
+    const focus = { start: 50, end: 54, anchor: "l49" }; // 5 lines, one of them 4 rows
+    const plain = cameraTarget(lines, focus, "show", "new");
+    const withWrap = cameraTarget(wrapped, focus, "show", "new");
+    // The same five lines occupy more rows, so the shot has to pull back further.
+    expect(withWrap.scale).toBeLessThan(plain.scale);
   });
 
   it("a focus taller than the frame opens at its own start, not its middle", () => {
