@@ -16,6 +16,10 @@ Create `.env` in the repo you review:
     # TTS_MODEL=eleven_multilingual_v2
     # TTS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
 
+It is read from the working directory, then the repository root — wherever the
+CLI itself is installed. `--env-file PATH` overrides both; anything already
+exported in the shell wins over all of them.
+
 ## Use
 
     # inside Claude Code, ideally the session that built the feature
