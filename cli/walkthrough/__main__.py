@@ -27,9 +27,39 @@ app = typer.Typer(add_completion=False, no_args_is_help=True)
 _MAX_ATTEMPTS = 5
 
 
+# dotenv's own discovery walks up from the installed package. For an editable
+# or out-of-tree install that is a different tree than the repository being
+# explained, so its .env is never found — look where the user is instead.
+_ENV_PATHS: list[Path] = []
+
+
+def _repo_root(start: Path) -> Path | None:
+    res = subprocess.run(["git", "-C", str(start), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True)
+    return Path(res.stdout.strip()) if res.returncode == 0 else None
+
+
+def _env_report() -> str:
+    return ", ".join(f"{p}{'' if p.is_file() else ' (not found)'}" for p in _ENV_PATHS)
+
+
 @app.callback()
-def _init() -> None:
-    load_dotenv()
+def _init(
+    env_file: Path | None = typer.Option(
+        None, "--env-file", exists=True, dir_okay=False,
+        help="Read environment from this file instead of the discovered .env",
+    ),
+) -> None:
+    cwd = Path.cwd()
+    if env_file is not None:
+        _ENV_PATHS.append(env_file)
+    else:
+        _ENV_PATHS.append(cwd / ".env")
+        root = _repo_root(cwd)
+        if root is not None and root != cwd:
+            _ENV_PATHS.append(root / ".env")
+    for p in _ENV_PATHS:
+        load_dotenv(p, override=False)  # already exported in the shell wins
 
 
 def _fail(errors: list[str]) -> None:
@@ -97,7 +127,6 @@ def narrate(
     jobs: int = typer.Option(2, "-j", "--jobs", help="Parallel synthesis pool"),
 ) -> None:
     """Synthesize narration; fills chapters[].audio."""
-    load_dotenv()  # the README promises TTS_* via .env
     wt = _load_validated()
     # A 429 flips the whole run to serial rather than retrying into the same
     # wall: the provider is rejecting the concurrency, not the request.
@@ -105,7 +134,10 @@ def narrate(
     _serial_lock = threading.Lock()
     try:
         narrator = get_narrator()
-    except (MissingKeyError, ValueError) as e:
+    except MissingKeyError as e:
+        typer.echo(f"error: {e} — checked {_env_report()}", err=True)
+        raise typer.Exit(3)
+    except ValueError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(3)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)

@@ -90,3 +90,77 @@ def test_narrate_end_to_end_fake_and_cache_hit(repo, monkeypatch):
     res2 = subprocess.run(["walkthrough", "narrate"], cwd=repo,
                           capture_output=True, text=True, env=env)
     assert "3/3 clips, 3 cached" in res2.stdout
+
+
+def _repo_with_plan(repo: Path) -> Path:
+    base = commit_file(repo, "greet.py", "")
+    head = commit_file(repo, "greet.py", AFTER)
+    wt = filled_plan()
+    wt.meta.base_sha, wt.meta.head_sha = base, head
+    wtdir = repo / ".walkthrough"
+    wtdir.mkdir()
+    (wtdir / "walkthrough.json").write_text(wt.model_dump_json())
+    return wtdir
+
+
+def _clean_env(repo: Path) -> dict[str, str]:
+    """No TTS_* inherited — the installed package is what dotenv would find."""
+    import os
+    return {"WALKTHROUGH_CACHE": str(repo / "cache"), "PATH": os.environ["PATH"]}
+
+
+def test_narrate_reads_env_from_working_repo(repo):
+    """The package lives in this checkout; the repo under review is elsewhere."""
+    _repo_with_plan(repo)
+    (repo / ".env").write_text("TTS_PROVIDER=fake\n")
+    res = subprocess.run(["walkthrough", "narrate"], cwd=repo,
+                         capture_output=True, text=True, env=_clean_env(repo))
+    assert res.returncode == 0, res.stderr
+
+
+def test_narrate_finds_env_at_repo_root_from_subdir(repo):
+    _repo_with_plan(repo)
+    (repo / ".env").write_text("TTS_PROVIDER=fake\n")
+    sub = repo / "sub"
+    sub.mkdir()
+    res = subprocess.run(["walkthrough", "narrate"], cwd=sub,
+                         capture_output=True, text=True, env=_clean_env(repo))
+    # cwd has no plan, but the key resolved — that is a plan error, not a key one.
+    assert "TTS_API_KEY" not in res.stderr
+
+
+def test_narrate_env_file_override(repo, tmp_path):
+    _repo_with_plan(repo)
+    custom = tmp_path / "elsewhere.env"
+    custom.write_text("TTS_PROVIDER=fake\n")
+    res = subprocess.run(["walkthrough", "--env-file", str(custom), "narrate"],
+                         cwd=repo, capture_output=True, text=True,
+                         env=_clean_env(repo))
+    assert res.returncode == 0, res.stderr
+
+
+def test_process_env_wins_over_dotenv(repo):
+    _repo_with_plan(repo)
+    (repo / ".env").write_text("TTS_PROVIDER=elevenlabs\nTTS_API_KEY=from-dotenv\n")
+    env = _clean_env(repo) | {"TTS_PROVIDER": "fake"}
+    res = subprocess.run(["walkthrough", "narrate"], cwd=repo,
+                         capture_output=True, text=True, env=env)
+    assert res.returncode == 0, res.stderr
+
+
+def test_missing_key_names_the_env_path_checked(repo):
+    _repo_with_plan(repo)
+    res = subprocess.run(["walkthrough", "narrate"], cwd=repo,
+                         capture_output=True, text=True, env=_clean_env(repo))
+    assert res.returncode == 3
+    assert str(repo / ".env") in res.stderr
+    assert "(not found)" in res.stderr
+
+
+def test_secret_value_is_never_echoed(repo):
+    _repo_with_plan(repo)
+    (repo / ".env").write_text("TTS_PROVIDER=nonsense\nTTS_API_KEY=sk-secret-123\n")
+    res = subprocess.run(["walkthrough", "narrate"], cwd=repo,
+                         capture_output=True, text=True, env=_clean_env(repo))
+    assert res.returncode == 3
+    assert "sk-secret-123" not in res.stdout + res.stderr
