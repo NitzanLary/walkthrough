@@ -2,6 +2,7 @@ import json
 import os
 import shutil as _shutil
 import subprocess
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +17,7 @@ from .git import fill_contents
 from .markdown import render_markdown
 from .narrator import cache as audio_cache
 from .narrator.base import MissingKeyError, RateLimited, get_narrator
+from .narrator.fake import MS_PER_WORD
 from .schema import AudioRef, Walkthrough
 from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
@@ -25,6 +27,9 @@ app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 # Rate-limit waits burn attempts too, so leave room for a few before giving up.
 _MAX_ATTEMPTS = 5
+
+# Short enough that --check costs a rounding error at any provider's rate.
+_CHECK_TEXT = "Narration check."
 
 
 # dotenv's own discovery walks up from the installed package. For an editable
@@ -121,13 +126,66 @@ def markdown() -> None:
     typer.echo(str(out))
 
 
+def _save_plan(wt: Walkthrough) -> None:
+    """Checkpoint the plan. Written aside and moved into place so an interrupt
+    mid-write leaves the last good plan rather than a truncated one."""
+    tmp = WT_JSON.with_name(WT_JSON.name + ".tmp")
+    tmp.write_text(wt.model_dump_json(indent=2))
+    tmp.replace(WT_JSON)
+
+
+def _fmt_duration(ms: int) -> str:
+    s = round(ms / 1000)
+    return f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
+
+
+def _narrator_line(narrator) -> str:
+    # voice id and model are configuration, not secrets; the key never appears.
+    return f"{narrator.provider} / {narrator.model} / voice {narrator.voice_id}"
+
+
+def _report_dry_run(wt: Walkthrough, narrator, keys: dict[str, str],
+                    no_cache: bool) -> None:
+    """What the run would cost, without a single request."""
+    cached_ids = set() if no_cache else {
+        ch.id for ch in wt.chapters if audio_cache.lookup(keys[ch.id]) is not None}
+    chars = sum(len(ch.narration) for ch in wt.chapters)
+    billed = sum(len(ch.narration) for ch in wt.chapters
+                 if ch.id not in cached_ids)
+    # ~150 wpm, the same pace the fake narrator assumes.
+    est_ms = sum(len(ch.narration.split()) for ch in wt.chapters) * MS_PER_WORD
+    typer.echo(f"provider: {_narrator_line(narrator)}")
+    typer.echo(f"chapters: {len(wt.chapters)} — {len(cached_ids)} cached, "
+               f"{len(wt.chapters) - len(cached_ids)} to synthesize")
+    typer.echo(f"characters: {chars} total, {billed} to synthesize")
+    typer.echo(f"estimated narration: {_fmt_duration(est_ms)}")
+    typer.echo("dry run — no requests made")
+
+
+def _run_check(narrator) -> None:
+    """One short sample: proves the key, the model, and the voice in one call."""
+    typer.echo(f"provider: {_narrator_line(narrator)}")
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            clip = narrator.synthesize(_CHECK_TEXT, Path(td) / "check.mp3")
+        except Exception as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(3)
+    typer.echo(f"ok — synthesized a {_fmt_duration(clip.duration_ms)} sample")
+
+
 @app.command()
 def narrate(
     no_cache: bool = typer.Option(False, "--no-cache", help="Force re-synthesis"),
     jobs: int = typer.Option(2, "-j", "--jobs", help="Parallel synthesis pool"),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Report configuration and workload; call nothing"),
+    check: bool = typer.Option(False, "--check",
+                               help="Synthesize one short sample to verify access, then exit"),
 ) -> None:
     """Synthesize narration; fills chapters[].audio."""
-    wt = _load_validated()
+    if dry_run and check:
+        raise typer.BadParameter("--dry-run and --check are mutually exclusive")
     # A 429 flips the whole run to serial rather than retrying into the same
     # wall: the provider is rejecting the concurrency, not the request.
     _serialized = threading.Event()
@@ -140,26 +198,56 @@ def narrate(
     except ValueError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(3)
-    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    cached_count = 0
+    if check:  # a credential check is useful before a plan exists
+        _run_check(narrator)
+        return
+    wt = _load_validated()
     # Request-stitching context: neighbors' narration keeps tone continuous.
     stitch = {
         ch.id: (wt.chapters[i - 1].narration if i > 0 else "",
                 wt.chapters[i + 1].narration if i + 1 < len(wt.chapters) else "")
         for i, ch in enumerate(wt.chapters)
     }
+    keys = {
+        ch.id: audio_cache.cache_key(narrator.provider, narrator.model,
+                                     narrator.voice_id, ch.narration,
+                                     previous_text=stitch[ch.id][0],
+                                     next_text=stitch[ch.id][1])
+        for ch in wt.chapters
+    }
+    if dry_run:
+        _report_dry_run(wt, narrator, keys, no_cache)
+        return
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    counts = {"cached": 0, "synthesized": 0, "retried": 0, "failed": 0}
+    done = 0
+    # One lock for the plan, the counters and the progress line together: with
+    # -j > 1 a half-written checkpoint or an interleaved line is the same bug.
+    report_lock = threading.Lock()
 
-    def one(ch) -> tuple[str, AudioRef, bool]:
+    def record(ch, ref: AudioRef | None, kind: str, note: str = "",
+               retried: bool = False) -> None:
+        nonlocal done
+        with report_lock:
+            done += 1
+            counts[kind] += 1
+            counts["retried"] += retried
+            if ref is not None:
+                ch.audio = ref
+                _save_plan(wt)  # an interrupted run keeps what already landed
+            typer.echo(f"[{done}/{len(wt.chapters)}] {ch.id} {kind}{note}", err=True)
+
+    def one(ch) -> None:
         out = AUDIO_DIR / f"{ch.id}.mp3"
         prev_text, next_text = stitch[ch.id]
-        key = audio_cache.cache_key(narrator.provider, narrator.model,
-                                    narrator.voice_id, ch.narration,
-                                    previous_text=prev_text, next_text=next_text)
+        key = keys[ch.id]
         if not no_cache and (hit := audio_cache.lookup(key)) is not None:
             _shutil.copy2(hit.path, out)
-            return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
-                                   duration_ms=hit.duration_ms), True
+            record(ch, AudioRef(path=f"audio/{ch.id}.mp3",
+                                duration_ms=hit.duration_ms), "cached")
+            return
         last_err: Exception | None = None
+        retries = 0
         for attempt in range(_MAX_ATTEMPTS):
             try:
                 if _serialized.is_set():
@@ -175,6 +263,7 @@ def narrate(
                 break
             except RateLimited as e:
                 last_err = e
+                retries += 1
                 if not _serialized.is_set():
                     _serialized.set()
                     typer.echo("rate limited by provider — continuing one at a time",
@@ -182,29 +271,27 @@ def narrate(
                 time.sleep(e.retry_after if e.retry_after is not None else 2 ** attempt)
             except Exception as e:
                 last_err = e
+                retries += 1
                 if attempt < _MAX_ATTEMPTS - 1:
                     time.sleep(2 ** attempt)
         else:
-            raise RuntimeError(
-                f"chapter {ch.id}: synthesis failed after {_MAX_ATTEMPTS} attempts: {last_err}")
+            record(ch, None, "failed",
+                   f" after {_MAX_ATTEMPTS} attempts: {last_err}")
+            return
         audio_cache.store(key, clip.path, clip.duration_ms)
-        return ch.id, AudioRef(path=f"audio/{ch.id}.mp3",
-                               duration_ms=clip.duration_ms), False
+        record(ch, AudioRef(path=f"audio/{ch.id}.mp3",
+                            duration_ms=clip.duration_ms), "synthesized",
+               f" on attempt {retries + 1}" if retries else "", retried=bool(retries))
 
-    try:
-        with ThreadPoolExecutor(max_workers=jobs) as pool:
-            results = list(pool.map(one, wt.chapters))
-    except RuntimeError as e:
-        typer.echo(f"error: {e}", err=True)
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        list(pool.map(one, wt.chapters))
+
+    landed = counts["cached"] + counts["synthesized"]
+    typer.echo(f"{landed}/{len(wt.chapters)} clips, {counts['cached']} cached, "
+               f"{counts['synthesized']} synthesized ({counts['retried']} retried), "
+               f"{counts['failed']} failed")
+    if counts["failed"]:
         raise typer.Exit(3)
-
-    by_id = {r[0]: r for r in results}
-    for ch in wt.chapters:
-        _, ref, was_cached = by_id[ch.id]
-        ch.audio = ref
-        cached_count += was_cached
-    WT_JSON.write_text(wt.model_dump_json(indent=2))
-    typer.echo(f"{len(results)}/{len(results)} clips, {cached_count} cached")
 
 
 def _staged_renderer() -> Path:

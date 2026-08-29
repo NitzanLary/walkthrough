@@ -28,13 +28,22 @@ exported in the shell wins over all of them.
     # later, from a shell
     walkthrough render             # → .walkthrough/out.mp4
 
-Commands: `validate` · `markdown` · `narrate [--no-cache] [-j N]` · `view` ·
-`studio` · `render [--out PATH]` · `clean`.
+Commands: `validate` · `markdown` ·
+`narrate [--dry-run] [--check] [--no-cache] [-j N]` ·
+`view` · `studio` · `render [--out PATH]` · `clean`.
 Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 environment
 problem (tooling missing, or another render already holds the output path).
 
+`narrate --dry-run` prints the provider, model, voice, chapter and character
+counts, cache hits and estimated narration length without calling the API;
+`narrate --check` synthesizes one short sample to prove the key, model and voice
+work. A run then reports one line per chapter and a summary splitting cached,
+synthesized, retried and failed clips.
+
 `narrate` synthesizes 2 chapters at a time; a 429 from the provider drops the
 run to one at a time and honors `Retry-After` rather than failing the chapter.
+Each finished chapter is checkpointed into `walkthrough.json`, so an interrupted
+or partly failed run keeps what landed and the rerun pays only for the rest.
 `render` writes to a temp file and moves it into place only on success, so a
 failed or interrupted render leaves the previous MP4 intact.
 
