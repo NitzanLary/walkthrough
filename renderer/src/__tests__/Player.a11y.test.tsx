@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,10 +21,15 @@ const player = vi.hoisted(() => ({
   removeEventListener: vi.fn(),
 }));
 
+// Every set of props the shell has handed <Player>, so a test can check that
+// they keep their identity across re-renders.
+const playerProps = vi.hoisted(() => [] as Record<string, unknown>[]);
+
 vi.mock("@remotion/player", async () => {
   const react = await import("react");
   return {
-    Player: react.forwardRef((_props: Record<string, unknown>, ref) => {
+    Player: react.forwardRef((props: Record<string, unknown>, ref) => {
+      playerProps.push(props);
       react.useImperativeHandle(ref, () => player);
       return react.createElement("div", { "data-testid": "stage" });
     }),
@@ -40,6 +45,7 @@ const timeline = buildTimeline(fixture.chapters as never, FPS);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  playerProps.length = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({ json: async () => fixture })),
@@ -163,5 +169,30 @@ describe("captions and transcript", () => {
     for (const ch of fixture.chapters) {
       expect(transcript.textContent).toContain(ch.narration);
     }
+  });
+});
+
+describe("props handed to the player", () => {
+  // The shell re-renders on every frame to move the caption and the current
+  // chapter. A fresh object identity on either of these props tears down the
+  // player's media pipeline and starts a new one while the old one is still
+  // playing, so the narration stacks up a few milliseconds behind itself.
+  it("keeps inputProps and style identical when the frame advances", async () => {
+    await renderPlayer();
+    const before = playerProps.length;
+    expect(before).toBeGreaterThan(0);
+
+    const onFrame = player.addEventListener.mock.calls.find(
+      ([event]) => event === "frameupdate",
+    )![1] as (e: { detail: { frame: number } }) => void;
+    await act(async () => onFrame({ detail: { frame: 42 } }));
+
+    expect(playerProps.length).toBeGreaterThan(before); // it really did re-render
+    expect(playerProps[playerProps.length - 1].inputProps).toBe(
+      playerProps[before - 1].inputProps,
+    );
+    expect(playerProps[playerProps.length - 1].style).toBe(
+      playerProps[before - 1].style,
+    );
   });
 });

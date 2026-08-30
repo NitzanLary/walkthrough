@@ -11,6 +11,12 @@ const SEEK_SMALL_S = 5;
 const SEEK_LARGE_S = 10;
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
+// Both of these are props of <Player>. The shell re-renders on every frame to
+// drive the caption and the current chapter, and a fresh object identity here
+// restarts the player's media pipeline while the previous one keeps playing —
+// the same narration a few milliseconds behind itself, over and over.
+const PLAYER_STYLE = { width: "100%", maxWidth: 1280, backgroundColor: "#181818" } as const;
+
 function formatTime(frames: number, fps: number): string {
   const total = Math.max(0, Math.round(frames / fps));
   const m = Math.floor(total / 60);
@@ -82,6 +88,7 @@ export const PlayerPage: React.FC = () => {
     () => (data ? buildCues(data.chapters, timeline, FPS) : []),
     [data, timeline],
   );
+  const inputProps = useMemo(() => ({ data: data as WT }), [data]);
   const duration = Math.max(1, totalFrames(timeline));
   const active = chapterIndexAt(timeline, frame);
   const caption = captionsOn ? cueAt(cues, frame)?.text ?? "" : "";
@@ -251,7 +258,7 @@ export const PlayerPage: React.FC = () => {
           <Player
             ref={ref}
             component={Walkthrough}
-            inputProps={{ data }}
+            inputProps={inputProps}
             durationInFrames={duration}
             fps={FPS}
             compositionWidth={1920}
@@ -260,7 +267,7 @@ export const PlayerPage: React.FC = () => {
             // The shell owns the keyboard; the built-in binding also steals
             // focus to the play button every time playback toggles.
             spaceKeyToPlayOrPause={false}
-            style={{ width: "100%", maxWidth: 1280, backgroundColor: "#181818" }}
+            style={PLAYER_STYLE}
           />
         </div>
 
