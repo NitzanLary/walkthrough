@@ -2,6 +2,7 @@
 them to self-correct, so every message names the chapter index and the fix."""
 from __future__ import annotations
 
+from . import CHAPTER_BUDGET_MS, MS_PER_WORD
 from .schema import FileEntry, Walkthrough
 
 DRIFT_WINDOW = 20
@@ -83,3 +84,23 @@ def check_chapter_order(wt: Walkthrough) -> list[str]:
     if not wt.chapters or wt.chapters[-1].action != "closing":
         errors.append(f"chapters[{max(len(wt.chapters) - 1, 0)}].action must be 'closing'")
     return errors
+
+
+def check_narration_budget(wt: Walkthrough) -> list[str]:
+    """Warn on chapters that will overrun the per-chapter ceiling once spoken.
+
+    Narration is written before any audio exists, so the word count is the only
+    signal available at validate time — and the one the author can act on.
+    """
+    warnings = []
+    for i, ch in enumerate(wt.chapters):
+        words = len(ch.narration.split())
+        est_ms = words * MS_PER_WORD
+        if est_ms <= CHAPTER_BUDGET_MS:
+            continue
+        warnings.append(
+            f"chapters[{i}] ({ch.id}): narration is {words} words, about "
+            f"{est_ms / 1000:.0f}s spoken, over the {CHAPTER_BUDGET_MS // 1000}s "
+            f"chapter ceiling ({CHAPTER_BUDGET_MS // MS_PER_WORD} words). Cut it "
+            f"or split the chapter into a zoom + scroll pair.")
+    return warnings

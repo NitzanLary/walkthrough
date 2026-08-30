@@ -96,8 +96,10 @@ In `renderer/src/lib/timeline.ts`, these hold together and break loudly when nud
   and `y` must snap to the row grid. Drop any one and rows get sliced through the glyphs at the edges.
 - Zoom is capped by focus *height* and by row *width* — the gutter scales with the text, so the
   constraint is `scale * (GUTTER_W + chars * CHAR_W) <= CODE_VIEW_W`.
-- The width cap steps aside when it can't be satisfied at scale 1; a line too long to ever fit
-  shouldn't deny every other line its framing.
+- Lines soft-wrap at `WRAP_COLS`, so no rendered row can be wider than the window and the width
+  cap is always satisfiable at scale 1. Wrapping does not disturb the row grid — a continuation
+  row is still exactly `LINE_H` — but a focus spans *rows*, not lines, so a wrapped line inside
+  one makes the shot pull back.
 
 **Verify camera changes by rendering, not by reasoning:**
 

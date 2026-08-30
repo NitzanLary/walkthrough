@@ -6,9 +6,8 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 
+from .. import MS_PER_WORD
 from .base import Clip
-
-MS_PER_WORD = 400  # ~150 wpm, the calm mid-pace voice
 
 
 class FakeNarrator:

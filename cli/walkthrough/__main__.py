@@ -12,16 +12,15 @@ import typer
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from . import AUDIO_DIR, WT_JSON
+from . import AUDIO_DIR, MS_PER_WORD, WT_JSON
 from .git import fill_contents
 from .markdown import render_markdown
 from .narrator import cache as audio_cache
 from .narrator.base import MissingKeyError, RateLimited, get_narrator
-from .narrator.fake import MS_PER_WORD
 from .schema import AudioRef, Walkthrough
 from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
-                       check_focus_ranges)
+                       check_focus_ranges, check_narration_budget)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -99,6 +98,7 @@ def validate() -> None:
         errors += anchor_errors
         errors += check_focus_ranges(wt)
         errors += check_chapter_order(wt)
+        warnings += check_narration_budget(wt)
     for msg in warnings:
         typer.echo(f"warning: {msg}")
     if errors:
@@ -152,7 +152,7 @@ def _report_dry_run(wt: Walkthrough, narrator, keys: dict[str, str],
     chars = sum(len(ch.narration) for ch in wt.chapters)
     billed = sum(len(ch.narration) for ch in wt.chapters
                  if ch.id not in cached_ids)
-    # ~150 wpm, the same pace the fake narrator assumes.
+    # The measured speaking rate, the same one validate budgets against.
     est_ms = sum(len(ch.narration.split()) for ch in wt.chapters) * MS_PER_WORD
     typer.echo(f"provider: {_narrator_line(narrator)}")
     typer.echo(f"chapters: {len(wt.chapters)} — {len(cached_ids)} cached, "

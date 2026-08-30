@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from walkthrough import MS_PER_WORD
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_LIVE") != "1", reason="set RUN_LIVE=1 to run")
 
@@ -37,5 +39,5 @@ def test_skill_produces_valid_plan_within_budget():
     changed = plan["meta"]["stats"]["added"] + plan["meta"]["stats"]["removed"]
     budget_s = min(600, max(60, changed * 0.45))
     words = sum(len(c["narration"].split()) for c in plan["chapters"])
-    est_s = words / 2.5  # the skill's own words-per-second planning rate
+    est_s = words * MS_PER_WORD / 1000  # the measured speaking rate
     assert est_s <= budget_s * 1.25, f"estimated {est_s:.0f}s vs budget {budget_s:.0f}s"

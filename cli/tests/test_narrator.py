@@ -207,7 +207,8 @@ def test_dry_run_reports_configuration_and_workload_without_any_request(repo, mo
     assert "chapters: 3 — 0 cached, 3 to synthesize" in result.output
     # 23 + 40 + 5 characters of narration, all of it billable
     assert "characters: 68 total, 68 to synthesize" in result.output
-    assert "estimated narration: 4s" in result.output
+    # 12 words at the measured MS_PER_WORD, not the nominal rate
+    assert "estimated narration: 5s" in result.output
     saved = json.loads((wtdir / "walkthrough.json").read_text())
     assert all(ch["audio"] is None for ch in saved["chapters"])
 

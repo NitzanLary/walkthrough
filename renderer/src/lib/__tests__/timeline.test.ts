@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeLineDiff } from "../diff";
+import { computeLineDiff, focusIndexRange } from "../diff";
 import {
   buildTimeline, cameraTarget, totalFrames, CODE_VIEW_H, LINE_H, diffSide, chapterTargets,
   CHAR_W, CODE_VIEW_W, GUTTER_W, CONTEXT_LINES, SHOW_MAX_SCALE, dimFor, maxScaleForWidth,
+  LEAD_LINES, ZOOM_MIN_SCALE, WRAP_COLS,
 } from "../timeline";
 
 const chapters = [
@@ -40,17 +41,99 @@ describe("cameraTarget", () => {
     expect(visible).toBeLessThan(13 + CONTEXT_LINES + LINE_H);
   });
 
-  it("a focus line too wide for scale 1 does not block framing", () => {
-    // 209 chars cannot fit at any scale >= 1, so the width cap steps aside
-    // rather than pinning the chapter at scale 1 (real case: examples/small.json).
+  it("an over-wide line wraps instead of clipping, so the width cap always holds", () => {
+    // 209 chars fit at no scale >= 1, and the cap used to step aside and let the
+    // tail clip (real case: examples/small.json). It now becomes two rows.
     const huge = "x".repeat(209);
     const withHuge = computeLineDiff(
       "",
       Array.from({ length: 200 }, (_, i) => (i === 55 ? huge : `l${i}`)).join("\n") + "\n",
     );
     expect(maxScaleForWidth(209)).toBeLessThan(1);
+    // The widest row that can now exist still fits the window at scale 1.
+    expect(maxScaleForWidth(WRAP_COLS)).toBeGreaterThanOrEqual(1);
     const { scale } = cameraTarget(withHuge, { start: 50, end: 62, anchor: "l49" }, "show", "new");
-    expect(scale).toBeGreaterThan(1);
+    expect(scale * (GUTTER_W + WRAP_COLS * CHAR_W)).toBeLessThanOrEqual(CODE_VIEW_W);
+  });
+
+  it("a wrapped line contributes every one of its rows to the framing", () => {
+    const long = "x".repeat(WRAP_COLS * 3);
+    const wrapped = computeLineDiff(
+      "",
+      Array.from({ length: 200 }, (_, i) => (i === 51 ? long : `l${i}`)).join("\n") + "\n",
+    );
+    const focus = { start: 50, end: 54, anchor: "l49" }; // 5 lines, one of them 4 rows
+    const plain = cameraTarget(lines, focus, "show", "new");
+    const withWrap = cameraTarget(wrapped, focus, "show", "new");
+    // The same five lines occupy more rows, so the shot has to pull back further.
+    expect(withWrap.scale).toBeLessThan(plain.scale);
+  });
+
+  it("a focus taller than the frame opens at its own start, not its middle", () => {
+    // 40 after-lines is inside the 60-line authoring cap, but 40 rows is 1120px
+    // against an 868px viewport: centring would open the chapter 4 rows below
+    // focus.start and leave the anchor off-screen.
+    const { y, scale } = cameraTarget(lines, { start: 50, end: 89, anchor: "l49" }, "show", "new");
+    const [a] = focusIndexRange(lines, { start: 50, end: 89, anchor: "l49" }, "new");
+    expect(y).toBeCloseTo((LEAD_LINES * LINE_H - a * LINE_H) * scale);
+    // The anchor row sits inside the viewport, LEAD_LINES down from the top.
+    const anchorTop = a * LINE_H * scale + y;
+    expect(anchorTop).toBeGreaterThanOrEqual(0);
+    expect(anchorTop).toBeLessThan(CODE_VIEW_H);
+  });
+
+  it("deleted rows inside an after-file focus do not push the anchor out of frame", () => {
+    // The real shape from issue #29: an after-file range whose interior holds a
+    // deleted hunk, so the rendered region is taller than end - start + 1.
+    const src = Array.from({ length: 120 }, (_, i) => `l${i}`);
+    const withDel = computeLineDiff(
+      // 10 lines removed just inside the focus; the focus is still after-coords.
+      [...src.slice(0, 40), ...Array.from({ length: 10 }, (_, i) => `gone${i}`), ...src.slice(40)]
+        .join("\n") + "\n",
+      src.join("\n") + "\n",
+    );
+    const focus = { start: 30, end: 65, anchor: "l29" }; // 36 after-lines, 46 rows
+    const [a, b] = focusIndexRange(withDel, focus, "new");
+    expect(b - a + 1).toBeGreaterThan(focus.end - focus.start + 1); // deletions add rows
+    const { y, scale } = cameraTarget(withDel, focus, "scroll", "new");
+    const anchorTop = a * LINE_H * scale + y;
+    expect(anchorTop).toBeGreaterThanOrEqual(0);
+    expect(anchorTop).toBeLessThan(CODE_VIEW_H);
+  });
+
+  it("a focus that fits the frame is still centred", () => {
+    const focus = { start: 50, end: 59, anchor: "l49" };
+    const { y, scale } = cameraTarget(lines, focus, "show", "new");
+    const [a, b] = focusIndexRange(lines, focus, "new");
+    const centre = (a * LINE_H + ((b - a + 1) * LINE_H) / 2) * scale + y;
+    expect(Math.abs(centre - CODE_VIEW_H / 2)).toBeLessThanOrEqual((LINE_H * scale) / 2);
+  });
+
+  it("a tall zoom is floored so it never renders as a show", () => {
+    // 30 lines drives the height fit below 1 (868 / (30 * 28 * 1.4) = 0.74),
+    // which used to clamp to scale 1 — identical to `show`.
+    const focus = { start: 50, end: 79, anchor: "l49" };
+    const shown = cameraTarget(lines, focus, "show", "new").scale;
+    const zoomed = cameraTarget(lines, focus, "zoom", "new").scale;
+    expect(shown).toBe(1);
+    expect(zoomed).toBeGreaterThan(shown);
+    // snapScale rounds down to a whole row count, so the floor lands just under it.
+    expect(zoomed).toBeCloseTo(CODE_VIEW_H / (Math.ceil(CODE_VIEW_H / (LINE_H * ZOOM_MIN_SCALE)) * LINE_H));
+  });
+
+  it("the zoom floor yields to a width cap that can be met", () => {
+    // A 120-char row fits at 1.10 but not at 1.25: clipping the focused code off
+    // the right edge is worse than a zoom that reads weakly.
+    const long = "x".repeat(120);
+    const wide = computeLineDiff(
+      "",
+      Array.from({ length: 200 }, (_, i) => (i === 60 ? long : `l${i}`)).join("\n") + "\n",
+    );
+    const cap = maxScaleForWidth(long.length);
+    expect(cap).toBeGreaterThan(1);
+    expect(cap).toBeLessThan(ZOOM_MIN_SCALE);
+    const { scale } = cameraTarget(wide, { start: 50, end: 79, anchor: "l49" }, "zoom", "new");
+    expect((GUTTER_W + long.length * CHAR_W) * scale).toBeLessThanOrEqual(CODE_VIEW_W);
   });
 
   it("dimFor separates the actions", () => {
@@ -59,9 +142,10 @@ describe("cameraTarget", () => {
     expect(dimFor("highlight")).toBe(1);
   });
 
-  it("zoom scale follows clamp(viewportH / (focusLines * 28 * 1.4), 1, 2.2)", () => {
-    const focus = { start: 50, end: 79, anchor: "l49" }; // 30 lines
-    const expected = Math.min(2.2, Math.max(1, CODE_VIEW_H / (30 * LINE_H * 1.4)));
+  it("zoom scale follows clamp(viewportH / (focusLines * 28 * 1.4), ZOOM_MIN_SCALE, 2.2)", () => {
+    // 15 lines, where the height fit and not the floor is the binding constraint.
+    const focus = { start: 50, end: 64, anchor: "l49" };
+    const expected = Math.min(2.2, Math.max(ZOOM_MIN_SCALE, CODE_VIEW_H / (15 * LINE_H * 1.4)));
     expect(cameraTarget(lines, focus, "zoom", "new").scale).toBeCloseTo(expected);
   });
 

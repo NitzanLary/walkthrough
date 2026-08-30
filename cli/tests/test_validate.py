@@ -2,9 +2,11 @@ import json
 import subprocess
 from pathlib import Path
 
+from walkthrough import CHAPTER_BUDGET_MS, MS_PER_WORD
 from walkthrough.schema import Walkthrough
 from walkthrough.validate import (check_anchors, check_chapter_order,
-                                  check_file_refs, check_focus_ranges)
+                                  check_file_refs, check_focus_ranges,
+                                  check_narration_budget)
 
 from conftest import commit_file, git
 from test_schema import make_plan
@@ -88,6 +90,40 @@ def test_file_ref_and_range_checks():
     errs = check_focus_ranges(wt)
     assert len(errs) == 1
     assert "chapters[1].focus.end (212) exceeds line count of greet.py (9)" in errs[0]
+
+
+def test_narration_budget_warns_only_past_the_chapter_ceiling():
+    ceiling_words = CHAPTER_BUDGET_MS // MS_PER_WORD
+    wt = filled_plan()
+    wt.chapters[1].narration = " ".join(["word"] * ceiling_words)
+    assert check_narration_budget(wt) == []
+
+    wt.chapters[1].narration = " ".join(["word"] * (ceiling_words + 20))
+    warnings = check_narration_budget(wt)
+    assert len(warnings) == 1
+    assert "chapters[1] (c02)" in warnings[0]
+    assert f"{ceiling_words + 20} words" in warnings[0]
+    assert "split" in warnings[0]
+
+
+def test_cli_validate_reports_budget_warning_and_still_exits_0(repo):
+    base = commit_file(repo, "greet.py", "")
+    head = commit_file(repo, "greet.py", AFTER)
+    p = make_plan()
+    p["meta"]["base_sha"], p["meta"]["head_sha"] = base, head
+    p["files"][0] = {"path": "greet.py", "language": None, "status": "modified",
+                     "old_path": None, "before": None, "after": None}
+    p["chapters"][1]["focus"] = {"start": 4, "end": 5, "anchor": "def greet(name):"}
+    p["chapters"][1]["narration"] = " ".join(["word"] * 120)
+    wtdir = repo / ".walkthrough"
+    wtdir.mkdir()
+    (wtdir / "walkthrough.json").write_text(json.dumps(p))
+
+    res = subprocess.run(["walkthrough", "validate"], cwd=repo,
+                         capture_output=True, text=True)
+    # Overshoot is a quality problem, not a broken plan: warn, do not block.
+    assert res.returncode == 0, res.stderr
+    assert "warning:" in res.stdout and "120 words" in res.stdout
 
 
 def test_chapter_order_checks():
