@@ -47,6 +47,10 @@ or partly failed run keeps what landed and the rerun pays only for the rest.
 `render` writes to a temp file and moves it into place only on success, so a
 failed or interrupted render leaves the previous MP4 intact.
 
+The player page is keyboard-operable and captioned, and respects
+`prefers-reduced-motion`. Shortcuts are listed on the page itself; see
+`renderer/ACCESSIBILITY.md` for the manual keyboard and screen-reader tests.
+
 Artifacts land in `./.walkthrough/` (add it to your repo's ignores).
 Audio is cached at `~/.cache/walkthrough/audio/` keyed by provider, model,
 voice, and the narration text with its stitch context — reruns pay only for

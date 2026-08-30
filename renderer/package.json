@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "studio": "remotion studio",
-    "view": "vite --port 3000",
+    "view": "vite --port 3000 --strictPort",
     "test": "vitest run"
   },
   "dependencies": {
@@ -19,10 +19,14 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
     "@types/diff": "^5.2.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "axe-core": "^4.13.0",
+    "jsdom": "^30.0.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
     "vitest": "^2.1.1"

@@ -14,6 +14,14 @@ export function buildTimeline(chapters: Chapter[], fps: number): ChapterTiming[]
   });
 }
 
+/** Index of the chapter that contains `frame`, clamped to the timeline. */
+export function chapterIndexAt(timeline: ChapterTiming[], frame: number): number {
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    if (frame >= timeline[i].from) return i;
+  }
+  return 0;
+}
+
 export function totalFrames(timeline: ChapterTiming[]): number {
   if (timeline.length === 0) return 0;
   const last = timeline[timeline.length - 1];

@@ -1,0 +1,186 @@
+/* Player shell. Colors are checked against the #181818 page background: every
+   text token below clears 4.5:1, so nothing here relies on the dim #6e7681 the
+   code gutter uses. */
+.wt {
+  --bg: #181818;
+  --panel: #1f1f1f;
+  --line: #3a3a3a;
+  --text: #e6e6e6;
+  --muted: #b0b0b0;
+  --accent: #79c0ff;
+  --danger: #ff8781;
+  display: flex;
+  min-height: 100vh;
+  color: var(--text);
+  background: var(--bg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark; /* or the scrollbars come back light against all this */
+}
+
+.wt-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wt-skip {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 10;
+  padding: 8px 16px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.wt-skip:focus { top: 8px; }
+
+/* One visible focus ring for every control, not the browser default that some
+   of these backgrounds swallow. */
+.wt :focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wt-nav {
+  flex: 0 0 320px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  padding: 16px;
+}
+.wt-title { font-size: 18px; font-weight: 700; margin: 0 0 16px; }
+.wt-nav ol { list-style: none; margin: 0; padding: 0; }
+.wt-chapter {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.wt-chapter:hover { background: #252525; }
+/* Not colour alone: the current chapter is also bold and outlined. */
+.wt-chapter[aria-current="true"] {
+  background: #252525;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.wt-main { flex: 1; min-width: 0; padding: 24px; }
+.wt-stage { display: flex; justify-content: center; max-width: 1280px; margin: 0 auto; }
+
+/* Fullscreen carries the whole viewer, not just the video. The built-in
+   controls are off, so a fullscreen <Player> on its own has no way to pause. */
+.wt-viewer:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+/* Keep the stage short enough that the controls below it stay on screen. A
+   column flex item with auto margins does not stretch, so the width has to be
+   stated or the Player inside it resolves its own width: 100% against zero. */
+.wt-viewer:fullscreen .wt-stage {
+  width: 100%;
+  max-width: min(100%, calc((100vh - 260px) * 16 / 9));
+  flex: 0 0 auto;
+}
+.wt-viewer:fullscreen .wt-controls { margin-top: 0; }
+
+.wt-captions {
+  max-width: 1280px;
+  margin: 12px auto 0;
+  min-height: 3.2em;
+  padding: 12px 16px;
+  background: #101010;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+.wt-captions p { margin: 0; }
+
+.wt-controls { max-width: 1280px; margin: 12px auto 0; }
+.wt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wt-controls button, .wt-controls select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.wt-controls button[aria-pressed="true"] { border-color: var(--accent); }
+.wt-seek { flex: 1 1 200px; min-width: 140px; accent-color: var(--accent); }
+.wt-time { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.wt-section { max-width: 1280px; margin: 32px auto 0; }
+.wt-section h2 { font-size: 16px; margin: 0 0 12px; }
+.wt-keys { list-style: none; margin: 0; padding: 0; font-size: 14px; color: var(--muted); }
+.wt-keys li { padding: 2px 0; }
+.wt-keys kbd {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--text);
+}
+
+.wt-transcript { list-style: none; margin: 0; padding: 0; }
+.wt-transcript li { margin-bottom: 20px; }
+.wt-transcript h3 { margin: 0 0 4px; font-size: 14px; }
+.wt-transcript p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.wt-jump {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.wt-status { font-size: 14px; color: var(--muted); }
+.wt-error { padding: 40px; color: var(--danger); }
+
+/* Narrow viewports stack the chapter list above the player. Nothing is hidden:
+   the list scrolls in place and the transcript stays in the flow. */
+@media (max-width: 800px) {
+  .wt { display: block; }
+  .wt-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 40vh;
+  }
+  .wt-main { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wt *, .wt *::before, .wt *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
