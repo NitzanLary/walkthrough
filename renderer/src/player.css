@@ -14,6 +14,7 @@
   color: var(--text);
   background: var(--bg);
   font-family: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark; /* or the scrollbars come back light against all this */
 }
 
 .wt-sr-only {
@@ -78,7 +79,28 @@
 }
 
 .wt-main { flex: 1; min-width: 0; padding: 24px; }
-.wt-stage { display: flex; justify-content: center; }
+.wt-stage { display: flex; justify-content: center; max-width: 1280px; margin: 0 auto; }
+
+/* Fullscreen carries the whole viewer, not just the video. The built-in
+   controls are off, so a fullscreen <Player> on its own has no way to pause. */
+.wt-viewer:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+/* Keep the stage short enough that the controls below it stay on screen. A
+   column flex item with auto margins does not stretch, so the width has to be
+   stated or the Player inside it resolves its own width: 100% against zero. */
+.wt-viewer:fullscreen .wt-stage {
+  width: 100%;
+  max-width: min(100%, calc((100vh - 260px) * 16 / 9));
+  flex: 0 0 auto;
+}
+.wt-viewer:fullscreen .wt-controls { margin-top: 0; }
 
 .wt-captions {
   max-width: 1280px;

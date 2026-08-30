@@ -15,7 +15,7 @@ export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 // drive the caption and the current chapter, and a fresh object identity here
 // restarts the player's media pipeline while the previous one keeps playing —
 // the same narration a few milliseconds behind itself, over and over.
-const PLAYER_STYLE = { width: "100%", maxWidth: 1280, backgroundColor: "#181818" } as const;
+const PLAYER_STYLE = { width: "100%", backgroundColor: "#181818" } as const;
 
 function formatTime(frames: number, fps: number): string {
   const total = Math.max(0, Math.round(frames / fps));
@@ -41,7 +41,9 @@ export const PlayerPage: React.FC = () => {
   const [speed, setSpeed] = useState(1);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [status, setStatus] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
   const ref = useRef<PlayerRef>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/walkthrough.json")
@@ -121,6 +123,25 @@ export const PlayerPage: React.FC = () => {
     if (!player) return;
     if (player.isMuted()) player.unmute();
     else player.mute();
+  }, []);
+
+  // The video element on its own has no controls to fullscreen with, so the
+  // whole viewer goes fullscreen: stage, captions, controls and status region.
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else viewerRef.current?.requestFullscreen();
+  }, []);
+
+  useEffect(() => {
+    // Escape and the browser's own chrome exit fullscreen without telling the
+    // button, so the state follows the document rather than the click.
+    const onChange = () => {
+      const on = document.fullscreenElement === viewerRef.current;
+      setFullscreen(on);
+      setStatus(on ? "Fullscreen" : "Exited fullscreen");
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
   const stepSpeed = useCallback((direction: 1 | -1) => {
@@ -254,6 +275,7 @@ export const PlayerPage: React.FC = () => {
 
       <main className="wt-main" id="wt-player">
         <h2 className="wt-sr-only">Player</h2>
+        <div className="wt-viewer" ref={viewerRef}>
         <div className="wt-stage">
           <Player
             ref={ref}
@@ -324,13 +346,14 @@ export const PlayerPage: React.FC = () => {
           <button type="button" aria-pressed={muted} onClick={toggleMute}>
             Mute
           </button>
-          <button type="button" onClick={() => ref.current?.requestFullscreen()}>
-            Fullscreen
+          <button type="button" aria-pressed={fullscreen} onClick={toggleFullscreen}>
+            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
           </button>
           </div>
         </div>
 
         <p className="wt-sr-only" role="status" aria-live="polite">{status}</p>
+        </div>
 
         <section className="wt-section" aria-labelledby="wt-keys-heading">
           <h2 id="wt-keys-heading">Keyboard shortcuts</h2>

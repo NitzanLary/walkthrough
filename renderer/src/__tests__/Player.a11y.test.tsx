@@ -196,3 +196,39 @@ describe("props handed to the player", () => {
     );
   });
 });
+
+describe("fullscreen", () => {
+  // jsdom has no fullscreen API at all, so the element the shell asks to
+  // expand is captured off `this`.
+  let target: HTMLElement | null = null;
+  const requestFullscreen = vi.fn(function (this: HTMLElement) {
+    target = this;
+    return Promise.resolve();
+  });
+
+  beforeEach(() => {
+    target = null;
+    Element.prototype.requestFullscreen = requestFullscreen;
+  });
+  afterEach(() => {
+    delete (Element.prototype as Partial<Element>).requestFullscreen;
+  });
+
+  // Fullscreening the <Player> element alone leaves the viewer with no way to
+  // pause, seek or read a caption: the built-in controls are switched off, so
+  // every control lives in the shell around it.
+  it("expands an element that still contains the controls and captions", async () => {
+    await renderPlayer();
+    fireEvent.click(screen.getByRole("button", { name: "Fullscreen" }));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(player.requestFullscreen).not.toHaveBeenCalled();
+    expect(target).not.toBeNull();
+    for (const name of ["Play", "Previous chapter", "Next chapter", "Captions", "Mute"]) {
+      expect(target!.contains(screen.getByRole("button", { name }))).toBe(true);
+    }
+    expect(target!.contains(screen.getByRole("slider", { name: "Seek" }))).toBe(true);
+    expect(target!.contains(screen.getByRole("region", { name: "Captions" }))).toBe(true);
+    expect(target!.contains(screen.getByRole("status"))).toBe(true);
+  });
+});
