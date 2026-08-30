@@ -1,6 +1,5 @@
 import React from "react";
-import { Audio } from "@remotion/media";
-import { AbsoluteFill, Sequence, staticFile, useVideoConfig } from "remotion";
+import { Audio, AbsoluteFill, Sequence, staticFile, useVideoConfig } from "remotion";
 import { Camera } from "./components/Camera";
 import { Closing } from "./components/Closing";
 import { CodePane } from "./components/CodePane";
@@ -47,7 +46,12 @@ export const Walkthrough: React.FC<{ data: WT }> = ({ data }) => {
         const prev = samePrevFile ? targets[i - 1] : { y: 0, scale: 1 };
         return (
           <Sequence key={ch.id} from={t.from} durationInFrames={t.durationInFrames}>
-            <Audio src={staticFile(ch.audio.path)} />
+            {/* Remotion's HTML5 audio, not @remotion/media: the latter plays
+                through the Web Audio API, where playbackRate resamples the
+                buffer and takes the pitch up with it. An <audio> element
+                time-stretches instead — but only if asked, since Remotion
+                writes preservesPitch through verbatim and undefined is false. */}
+            <Audio src={staticFile(ch.audio.path)} preservePitch />
             {ch.action === "overview" ? (
               <Overview data={data} />
             ) : ch.action === "closing" ? (
