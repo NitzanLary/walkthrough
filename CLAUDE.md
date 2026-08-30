@@ -68,7 +68,8 @@ There is no system `ffmpeg`/`ffprobe` — use `npx remotion ffprobe` / `npx remo
 
 `narrate` with `TTS_PROVIDER=elevenlabs` or `openai` bills a live API. **Never run it unless the
 user has asked for it in this session.** Use `TTS_PROVIDER=fake` for any pipeline work — it
-produces realistic timings without spending.
+produces realistic timings without spending, and `narrate --dry-run` prices a real run without
+calling anything.
 
 **Reverting a fix to prove a test catches it re-arms the bug.** Issue #22 was the CLI reading
 `.env` from where the package is installed rather than from the working repo. Stashing that fix
