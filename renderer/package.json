@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "studio": "remotion studio",
-    "view": "vite --port 3000",
+    "view": "vite --port 3000 --strictPort",
     "test": "vitest run"
   },
   "dependencies": {

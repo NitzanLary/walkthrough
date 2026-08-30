@@ -1,6 +1,7 @@
 import json
 import os
 import shutil as _shutil
+import socket
 import subprocess
 import threading
 import time
@@ -224,11 +225,26 @@ def _staged_renderer() -> Path:
     return rd
 
 
+VIEW_PORT = 3000
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket() as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
 @app.command()
 def view() -> None:
     """Stage assets and serve the player page on http://localhost:3000."""
     rd = _staged_renderer()
-    typer.echo("player: http://localhost:3000")
+    # vite would pick the next free port and this message would still say 3000,
+    # so a forgotten server keeps serving the page the user thinks they killed —
+    # two players, and the narration plays over itself.
+    if not _port_free(VIEW_PORT):
+        typer.echo(f"error: port {VIEW_PORT} is already in use — another "
+                   f"`walkthrough view` is probably still running", err=True)
+        raise typer.Exit(4)
+    typer.echo(f"player: http://localhost:{VIEW_PORT}")
     subprocess.run(["npm", "run", "view"], cwd=rd)
 
 
