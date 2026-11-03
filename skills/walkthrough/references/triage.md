@@ -20,9 +20,9 @@ Append a `## Triage` table to `findings.md`, with one row per finding:
 - `FIX`: change the plan. The note says what changed.
 - `RULING`: keep the plan as it is. The note reads
   `reason: <why> — cost if wrong: <what a viewer loses if you are mistaken>`.
-- `N/A`: the listener misread, for example a `GAP` on a path already in
-  `meta.skipped`. The note says what it misread. Use it for `minor` findings
-  only.
+- `N/A`: the listener misread, for example a `GAP` on a hunk the incidental
+  chapter's narration already names. The note says what it misread. Use it
+  for `minor` findings only.
 
 If the findings table is empty (`nothing important`), there is nothing to
 triage. Go on to hand-off.
@@ -58,8 +58,9 @@ it at hand-off.
 
 1. Apply every `FIX` in one edit pass over `.walkthrough/walkthrough.json`.
 2. Rerun `walkthrough validate`, at most 3 attempts, then `walkthrough markdown`.
-3. Stop. There is no second listener pass. Anything still failing after the
-   cap goes into the hand-off report.
+3. Stop. There is no second listener pass. If `validate` still exits 2
+   after the cap, do not narrate: hand off the remaining errors with this
+   file.
 
 ## Worked example
 
@@ -72,7 +73,7 @@ it at hand-off.
 |----|---------|------|----------|---------|
 | F1 | 3 | WHY | blocks | Chapter 3 moves the cache into the request scope but never says why. |
 | F2 | 2 | JUMP | blocks | Chapter 2 passes a TenantKey that no chapter has defined yet. |
-| F3 | — | GAP | minor | The diff changes config/defaults.yaml and no chapter mentions it. |
+| F3 | — | GAP | minor | The diff raises the default timeout in config/defaults.yaml and no chapter mentions it. |
 | F4 | 4 | LOST | minor | Chapter 4 says the limiter drains without saying what drains it. |
 
 ## Counts
@@ -85,6 +86,6 @@ LOST 1 · JUMP 1 · WHY 1 · ORDER 0 · GAP 1 · MISMATCH 0 — blocks 2 · mino
 |----|----------|------|
 | F1 | FIX | Chapter 3 now says a request-scoped cache cannot leak one tenant's data into another's response. |
 | F2 | RULING | reason: chapter 2 shows only the call site, where TenantKey reads as an opaque ID, and moving its definition earlier would put validation before the entry point — cost if wrong: a viewer carries an undefined name for three chapters. |
-| F3 | N/A | config/defaults.yaml is listed in meta.skipped as a generated file. |
+| F3 | N/A | Chapter 6, the incidental chapter, already names the raised timeout default in config/defaults.yaml. |
 | F4 | FIX | Chapter 4 now says each request takes one token. |
 ```

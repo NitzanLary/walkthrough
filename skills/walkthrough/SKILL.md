@@ -102,8 +102,15 @@ Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
    the CLI. Otherwise run `walkthrough validate`, adding `--budget SECONDS`
    when the user passed one (without it, `validate` derives the default budget
    above from `meta.stats`). Read its errors, fix the JSON, and rerun until it
-   exits 0 (exit 2 is a validation failure). Cap at 3 attempts, then report the
-   remaining errors to the user and stop.
+   exits 0 (exit 2 is a validation failure). Cap at 3 attempts.
+
+   **Validation gate.** This cap applies to every `validate` run in steps 9,
+   10, and 12. If `validate` still exits 2 after its 3 attempts, stop. Do not
+   run `narrate` or `view`, because an invalid plan is never narrated. Hand
+   off instead:
+   - the remaining errors;
+   - the markdown path, if `walkthrough markdown` has run;
+   - `.walkthrough/review/findings.md`, if the listener pass ran.
 
    Focus line numbers do not have to be exact. When the anchor text matches
    exactly one line within ±20 lines of `focus.start`, `validate` shifts `start`
@@ -123,7 +130,8 @@ Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
    that no chapter shows.
 
 10. **Coverage self-review.** Check the plan yourself against this list, fix
-    the JSON inline, then rerun `walkthrough validate` once:
+    the JSON inline, then rerun `walkthrough validate` until it exits 0, with
+    the same cap of 3 attempts and the same gate as step 9:
     1. Every step-9 warning is resolved. Cut a chapter over the 25 s ceiling,
        or split it into a zoom + scroll pair. Merge or cut chapters until the
        total fits the budget. For a file that no chapter shows, either show
@@ -141,11 +149,14 @@ Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
 
 11. **Listener pass.** You wrote this plan knowing the code, so you cannot see
     where a newcomer gets lost. A fresh reader can.
-    1. Run `walkthrough markdown`.
-    2. Remove any `findings.md` from an earlier run, then write the diff of
-       the kept paths: every `files[].path`, plus `old_path` for renames.
+    1. Run `walkthrough markdown`. Then remove any `findings.md` left by an
+       earlier run, so the hand-off never reports a stale one:
        ```
        mkdir -p .walkthrough/review && rm -f .walkthrough/review/findings.md
+       ```
+    2. Write the diff of the kept paths: every `files[].path`, plus
+       `old_path` for renames.
+       ```
        git diff <meta.base_sha> <meta.head_sha> -- <kept paths> > .walkthrough/review/diff.patch
        ```
     3. Read `references/listener-prompt.md` (next to this file). Fill in its
@@ -167,22 +178,39 @@ Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
     2. Apply every `FIX` in one edit pass over `.walkthrough/walkthrough.json`.
        Answer `WHY` findings from what you know from building this change,
        then from commit messages and the PR body. Never ask the user.
-    3. Rerun `walkthrough validate` (cap 3 attempts, as in step 9), then
-       `walkthrough markdown`.
+    3. Rerun `walkthrough validate` (cap 3 attempts, as in step 9). Once it
+       exits 0, run `walkthrough markdown`.
 
-    This is a single wave. Do not dispatch the listener again. Whatever still
-    fails after the cap is reported at hand-off, not looped on. If the
-    findings table is empty (`nothing important`), there is nothing to triage.
+    This is a single wave. Do not dispatch the listener again. If `validate`
+    still exits 2 after the cap, the step-9 gate applies: stop without
+    narrating and hand off the remaining errors, the markdown path from step
+    11 (it shows the plan before this wave), and `findings.md`. Do not loop. If the findings table is empty
+    (`nothing important`), there is nothing to triage.
 
-13. **Hand off.** Run `walkthrough narrate`. Then start `walkthrough view` in
-    the background, because it keeps serving until stopped. Confirm the
-    player responds with `curl -sf -o /dev/null http://localhost:3000`,
-    retrying for up to 30 s. Report:
+13. **Hand off.** Run `narrate` and `view` only if the last `validate` exited
+    0. Otherwise the step-9 gate has already stopped you; hand off what it
+    lists.
+
+    Run `walkthrough narrate`. Then start `walkthrough view` in the
+    background, because it keeps serving until stopped. Another server may
+    already hold port 3000, and `curl` would then succeed against it, so
+    check `view` itself before trusting `curl`:
+    1. Wait up to 30 s for `view` to print `player: http://localhost:3000`.
+       It prints that only after finding the port free. If `view` exits
+       first, record its exit code and skip `curl`.
+    2. Run `curl -sf -o /dev/null http://localhost:3000`, retrying for up to
+       30 s.
+    3. Confirm the background `view` process is still running, using your
+       background-task tool's status or `kill -0 <pid>`.
+
+    Report:
     - each command's exit code: the last `validate`, `markdown`, and
       `narrate`, plus `view` if it exited, or the `curl` failure;
-    - the player URL, only if `curl` succeeded;
+    - the player URL, only if the `view` process is still running and `curl`
+      succeeded;
     - the markdown path and the chapter list;
-    - `.walkthrough/review/findings.md`, so the user can audit the triage;
+    - `.walkthrough/review/findings.md`, only if the listener pass ran, so
+      the user can audit the triage;
     - **Calls I made:**
       - every path in `meta.skipped`;
       - every chapter that merges several hunks, and the pattern it names;
@@ -198,4 +226,5 @@ Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
       complete text walkthrough on its own, so still report its path.
     - `view` exits 4 when Node is missing, the renderer has no
       `node_modules`, or port 3000 is taken; its message names the fix. Report
-      the markdown path and omit the player URL.
+      the markdown path and omit the player URL, even if `curl` reached
+      whatever already holds the port.

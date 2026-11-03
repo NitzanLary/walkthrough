@@ -1,7 +1,8 @@
 # Listener prompt
 
-Fill in the three absolute paths below, then send everything under the `---`
-line, and nothing else, to one fresh general-purpose subagent. Do not send
+Replace each placeholder with the absolute path of the file listed below,
+resolving it against the repository root, then send everything under the
+`---` line, and nothing else, to one fresh general-purpose subagent. Do not send
 session history, `walkthrough.json`, or hints about what you expect it to
 find. If the tool lets you choose a model, a mid-tier one is enough.
 

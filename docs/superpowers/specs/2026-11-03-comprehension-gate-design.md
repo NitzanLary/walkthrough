@@ -48,15 +48,22 @@ report that `cd cli && pip install -e .` unlocks the rest):
 | Step | What happens | Loop type |
 |---|---|---|
 | 9. Validate | `walkthrough validate [--budget S]` with the checks in §3. Fix and rerun until exit 0; cap 3 attempts, then report remaining errors and stop. | Deterministic self-correction |
-| 10. Coverage self-review | Inline checklist (§4). Every warning from step 9 is resolved here. Fix the JSON inline, then rerun `validate`. | Inline self-review |
-| 11. Listener pass | Run `walkthrough markdown`. Write the kept-paths diff to `.walkthrough/review/diff.patch`. Dispatch one fresh subagent with `references/listener-prompt.md` (§2). It writes `.walkthrough/review/findings.md` and returns counts only. | Fresh eyes |
-| 12. Triage + fix wave | Read `references/triage.md` (§5), mark every finding, apply one edit pass, rerun `validate` (cap 3) and `markdown`. | Bounded fix + rulings |
-| 13. Hand off | `narrate`, `view`, evidence-gated report with "Calls I made" (§6). | Evidence gate |
+| 10. Coverage self-review | Inline checklist (§4). Every warning from step 9 is resolved here. Fix the JSON inline, then rerun `validate` (cap 3, as in step 9). | Inline self-review |
+| 11. Listener pass | Run `walkthrough markdown` and remove any stale `.walkthrough/review/findings.md`. Write the kept-paths diff to `.walkthrough/review/diff.patch`. Dispatch one fresh subagent with `references/listener-prompt.md` (§2). It writes `.walkthrough/review/findings.md` and returns counts only. | Fresh eyes |
+| 12. Triage + fix wave | Read `references/triage.md` (§5), mark every finding, apply one edit pass, rerun `validate` (cap 3) and, once it exits 0, `markdown`. | Bounded fix + rulings |
+| 13. Hand off | `narrate`, `view`, evidence-gated report with "Calls I made" (§6). Runs only if the last `validate` exited 0. | Evidence gate |
 
-**No subagent tool available:** still run `walkthrough markdown` (step 11's
-first sub-step), skip the rest of step 11 and all of step 12, and say so at
-hand-off. The author must not substitute a self-read for the listener pass — it
-cannot read its own work blind.
+**Validation gate.** Every `validate` run in steps 9, 10, and 12 has the same
+cap of 3 attempts. If it still exits 2 after the cap, the plan is not
+narrated: the skill runs neither `narrate` nor `view`, and hands off the
+remaining errors, the markdown path if `markdown` ran, and `findings.md` if
+the listener pass ran.
+
+**No subagent tool available:** still run step 11's first sub-step
+(`walkthrough markdown`, then remove any stale `findings.md`), skip the rest
+of step 11 and all of step 12, and say so at hand-off. The author must not
+substitute a self-read for the listener pass — it cannot read its own work
+blind.
 
 `.walkthrough/review/` lives under the already-ignored `.walkthrough/`.
 
@@ -139,7 +146,8 @@ A checklist the author runs itself — no subagent:
 3. Every chapter says why, not only what.
 4. No chapter relies on a concept a later chapter introduces.
 
-Fix inline; rerun `validate` once. No re-review.
+Fix inline; rerun `validate` (cap 3 attempts and the validation gate, as in
+§1). No re-review.
 
 ## 5. Triage and fix wave — `skills/walkthrough/references/triage.md`
 
@@ -151,8 +159,8 @@ finding:
   commit messages and the PR body. If none holds the answer, narrate only
   what the code shows and list the gap as unanswered at hand-off.
 - `RULING` — keep as is: one-line reason and what it costs if wrong.
-- `N/A` — the listener misread (e.g. a `GAP` already in `meta.skipped`):
-  one line why.
+- `N/A` — the listener misread (e.g. a `GAP` on a hunk the incidental
+  chapter's narration already names): one line why. `minor` findings only.
 
 Rules:
 
@@ -172,20 +180,27 @@ Red flags (the file includes these as a table):
 | "It's obvious from the code" | The viewer sees the excerpt, not the code. |
 
 Fix wave: one edit pass over `.walkthrough/walkthrough.json`, then
-`walkthrough validate` (cap 3 attempts) and `walkthrough markdown`. No second listener pass;
-anything still failing after the cap is reported, not looped.
+`walkthrough validate` (cap 3 attempts) and `walkthrough markdown`. No second listener pass.
+If `validate` still fails after the cap, the plan is not narrated: the
+remaining errors are reported at hand-off (§1, validation gate), not looped
+on.
 
 ## 6. Hand-off (step 13)
 
 As today, plus:
 
+- Run `narrate` and `view` only if the last `validate` exited 0.
 - Report each step's exit code (`validate`, `markdown`, `narrate`, `view`).
-- Report the player URL only after confirming it responds (an HTTP request
-  to it returns success); otherwise report the failure.
+- Report the player URL only if the background `view` process is still
+  running and an HTTP request to the URL returns success. A server left on
+  port 3000 by an earlier run would answer the request while the new `view`
+  exits 4, so the request alone proves nothing. Otherwise report the
+  failure.
 - End with **Calls I made**: paths in `meta.skipped`, hunks merged into one
   chapter, every `RULING` row with its cost-if-wrong, and every unanswered
   `WHY`. State if the listener pass was skipped for lack of a subagent tool.
-- Name `.walkthrough/review/findings.md` so the user can audit the triage.
+- Name `.walkthrough/review/findings.md` so the user can audit the triage,
+  only if the listener pass ran.
 
 The existing exit 3 (`narrate`) / exit 4 (`view`) handling in step 10 is
 unchanged.
@@ -210,7 +225,9 @@ unchanged.
 2. **Skill, structural (opt-in live test).** Extend `test_live_skill.py`:
    run with `TTS_PROVIDER=fake`; assert `.walkthrough/review/findings.md`
    exists, every finding has a triage row, and no `blocks` finding lacks
-   `FIX` or a `RULING` with a reason.
+   `FIX` or a `RULING` with a reason. Afterwards, if port 3000 was free
+   before the run, stop the player the skill left listening on it (SIGTERM
+   to those PIDs only), so it cannot answer the next run's check.
 3. **Skill, RED/GREEN (manual, once).** On one real branch: run the current
    skill, then dispatch the listener on its markdown and record the `blocks`
    count (RED). Run the new skill on the same branch and record the `blocks`
