@@ -8,6 +8,10 @@ from .schema import FileEntry, Walkthrough
 DRIFT_WINDOW = 20
 # A taller focus cannot fill the frame, so the shot reads as a `show`.
 MAX_ZOOM_SPAN = 20
+# The default total budget, the same formula SKILL.md states: seconds per
+# changed line in the kept diff, clamped.
+BUDGET_S_PER_CHANGED_LINE = 0.45
+BUDGET_MIN_S, BUDGET_MAX_S = 60, 600
 
 
 def content_side(f: FileEntry) -> str:
@@ -129,3 +133,20 @@ def check_narration_budget(wt: Walkthrough) -> list[str]:
             f"chapter ceiling ({CHAPTER_BUDGET_MS // MS_PER_WORD} words). Cut it "
             f"or split the chapter into a zoom + scroll pair.")
     return warnings
+
+
+def default_budget_s(wt: Walkthrough) -> float:
+    changed = wt.meta.stats.added + wt.meta.stats.removed
+    return min(BUDGET_MAX_S, max(BUDGET_MIN_S, changed * BUDGET_S_PER_CHANGED_LINE))
+
+
+def check_total_budget(wt: Walkthrough, budget_s: float) -> list[str]:
+    """Warn when the whole narration will overrun the walkthrough's budget."""
+    words = sum(len(ch.narration.split()) for ch in wt.chapters)
+    est_ms = words * MS_PER_WORD
+    if est_ms <= budget_s * 1000:
+        return []
+    return [
+        f"narration totals {words} words, about {est_ms / 1000:.0f}s spoken, "
+        f"over the {budget_s:.0f}s budget ({int(budget_s * 1000 // MS_PER_WORD)} "
+        f"words). Merge repetitive chapters or cut narration."]

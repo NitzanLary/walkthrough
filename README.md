@@ -28,11 +28,18 @@ exported in the shell wins over all of them.
     # later, from a shell
     walkthrough render             # → .walkthrough/out.mp4
 
-Commands: `validate` · `markdown` ·
+Commands: `validate [--budget SECONDS]` · `markdown` ·
 `narrate [--dry-run] [--check] [--no-cache] [-j N]` ·
 `view` · `studio` · `render [--out PATH]` · `clean`.
 Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 environment
 problem (tooling missing, or another render already holds the output path).
+
+`validate` checks the plan against the schema and the recorded SHAs, corrects
+small anchor drift, and rejects a `zoom` taller than 20 lines (any focus over
+60). It warns, still exiting 0, when a chapter's narration runs past 25 s,
+when the whole narration runs past the budget (`--budget`, default
+`clamp((added + removed) × 0.45, 60, 600)` seconds from `meta.stats`), and when
+a file in `files[]` is shown by no chapter.
 
 `narrate --dry-run` prints the provider, model, voice, chapter and character
 counts, cache hits and estimated narration length without calling the API;

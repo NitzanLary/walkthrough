@@ -2,15 +2,18 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from walkthrough import CHAPTER_BUDGET_MS, MS_PER_WORD
 from walkthrough.schema import FileEntry, Walkthrough
 from walkthrough.validate import (check_anchors, check_chapter_order,
                                   check_file_refs, check_focus_ranges,
-                                  check_narration_budget, check_uncovered_files,
-                                  check_zoom_span)
+                                  check_narration_budget, check_total_budget,
+                                  check_uncovered_files, check_zoom_span,
+                                  default_budget_s)
 
 from conftest import commit_file, git
-from test_schema import make_plan
+from test_schema import REPO, make_plan
 
 AFTER = "import os\n\n\ndef greet(name):\n    return f\"hi {name}\"\n\n\ndef main():\n    print(greet(os.environ[\"USER\"]))\n"
 
@@ -265,3 +268,49 @@ def test_cli_validate_warns_on_uncovered_file_and_exits_0(repo):
     res = run_validate(repo, p)
     assert res.returncode == 0, res.stderr
     assert "warning: files[1] 'util.py' is shown by no chapter" in res.stdout
+
+
+def _set_total_words(wt: Walkthrough, n: int) -> None:
+    wt.chapters[0].narration = " ".join(["word"] * (n - 2))
+    wt.chapters[1].narration = "one"
+    wt.chapters[2].narration = "two"
+
+
+def test_total_budget_at_limit_ok_one_word_over_warns():
+    wt = filled_plan()
+    _set_total_words(wt, 200)  # 200 × 435 ms = exactly 87 s
+    assert check_total_budget(wt, 87) == []
+
+    _set_total_words(wt, 201)
+    warnings = check_total_budget(wt, 87)
+    assert len(warnings) == 1
+    assert "201 words" in warnings[0]
+    assert "over the 87s budget" in warnings[0]
+    assert "Merge" in warnings[0]
+
+
+@pytest.mark.parametrize("added,removed,want", [
+    (4, 0, 60), (1000, 0, 450), (900, 100, 450), (2000, 0, 600)])
+def test_default_budget_is_clamped_from_kept_stats(added, removed, want):
+    wt = filled_plan()
+    wt.meta.stats.added, wt.meta.stats.removed = added, removed
+    assert default_budget_s(wt) == pytest.approx(want)
+
+
+def test_cli_validate_budget_default_and_override(repo):
+    p = cli_plan(repo)  # stats +4 −0 → default budget 60 s
+    p["chapters"][0]["narration"] = " ".join(["word"] * 200)  # ~90 s in total
+    res = run_validate(repo, p)
+    assert res.returncode == 0, res.stderr
+    assert "over the 60s budget" in res.stdout
+
+    res = run_validate(repo, p, "--budget", "120")
+    assert res.returncode == 0, res.stderr
+    assert "s budget" not in res.stdout
+
+
+def test_small_example_fits_its_own_budget():
+    data = json.loads((REPO / "skills/walkthrough/examples/small.json").read_text())
+    wt = Walkthrough.model_validate(data)
+    assert check_total_budget(wt, default_budget_s(wt)) == []
+    assert check_narration_budget(wt) == []
