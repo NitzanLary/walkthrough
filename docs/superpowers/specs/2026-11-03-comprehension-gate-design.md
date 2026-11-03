@@ -53,9 +53,10 @@ report that `cd cli && pip install -e .` unlocks the rest):
 | 12. Triage + fix wave | Read `references/triage.md` (§5), mark every finding, apply one edit pass, rerun `validate` (cap 3) and `markdown`. | Bounded fix + rulings |
 | 13. Hand off | `narrate`, `view`, evidence-gated report with "Calls I made" (§6). | Evidence gate |
 
-**No subagent tool available:** skip step 11 and say so at hand-off. The
-author must not substitute a self-read for the listener pass — it cannot read
-its own work blind.
+**No subagent tool available:** still run `walkthrough markdown` (step 11's
+first sub-step), skip the rest of step 11 and all of step 12, and say so at
+hand-off. The author must not substitute a self-read for the listener pass — it
+cannot read its own work blind.
 
 `.walkthrough/review/` lives under the already-ignored `.walkthrough/`.
 

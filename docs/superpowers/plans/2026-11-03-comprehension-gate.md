@@ -1081,9 +1081,9 @@ In `skills/walkthrough/SKILL.md`, delete everything from the line starting `9. *
     4. The subagent writes `.walkthrough/review/findings.md` and replies with
        counts only.
 
-    If you have no subagent tool, skip this step and step 12, and say so at
-    hand-off. Do not substitute your own read of the markdown, because you
-    cannot read your own plan blind.
+    If you have no subagent tool, run sub-step 1 only, skip sub-steps 2–4 and
+    step 12, and say so at hand-off. Do not substitute your own read of the
+    markdown, because you cannot read your own plan blind.
 
 12. **Triage and fix.** Read `references/triage.md` now, immediately before
     triaging. Then:
