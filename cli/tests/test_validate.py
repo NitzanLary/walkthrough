@@ -288,6 +288,27 @@ def test_total_budget_at_limit_ok_one_word_over_warns():
     assert "over the 87s budget" in warnings[0]
     assert "Merge" in warnings[0]
     assert "chapters[0] (" in warnings[0]
+    # 201 × 435 ms = 87.4 s: rounding would print "87s spoken, over the 87s".
+    assert "about 88s spoken" in warnings[0]
+
+
+def test_total_budget_estimate_prints_above_a_fractional_budget():
+    wt = filled_plan()
+    _set_total_words(wt, 142)  # 142 × 435 ms = 61.77 s
+    warnings = check_total_budget(wt, 61.65)
+    assert len(warnings) == 1
+    assert "about 62s spoken, over the 61s budget" in warnings[0]
+
+
+def test_total_budget_names_the_longest_chapter_wherever_it_is():
+    wt = filled_plan()
+    wt.chapters[0].narration = "short"
+    wt.chapters[1].narration = "a bit longer"
+    wt.chapters[2].narration = " ".join(["word"] * 250)
+    warnings = check_total_budget(wt, 87)
+    assert len(warnings) == 1
+    assert "chapters[2] (" in warnings[0]
+    assert "250 words." in warnings[0]
 
 
 @pytest.mark.parametrize("added,removed,want", [
@@ -295,7 +316,9 @@ def test_total_budget_at_limit_ok_one_word_over_warns():
 def test_default_budget_is_clamped_from_kept_stats(added, removed, want):
     wt = filled_plan()
     wt.meta.stats.added, wt.meta.stats.removed = added, removed
-    assert default_budget_s(wt) == pytest.approx(want)
+    got = default_budget_s(wt)
+    assert got == pytest.approx(want)
+    assert isinstance(got, float)
 
 
 def test_cli_validate_budget_default_and_override(repo):

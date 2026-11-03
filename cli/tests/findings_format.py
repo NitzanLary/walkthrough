@@ -88,7 +88,15 @@ def parse(text: str) -> tuple[dict[str, Finding], list[Decision], list[str]]:
 
 
 def violations(text: str) -> list[str]:
-    """Every breach of the format or the triage rules; empty means sound."""
+    """Problems found by these checks; empty means none of them fired.
+
+    Checks: a `## Findings` section with the exact Findings header; 5 cells
+    per finding, a known type and severity, unique IDs; a `## Triage` section
+    with the exact Triage header whenever findings exist; 3 cells per triage
+    row, a known decision and a non-empty note; exactly one triage row per
+    finding and none for unknown IDs; `reason:` and `cost if wrong:` in every
+    RULING note; no `N/A` on a `blocks` finding. It does not check the Counts
+    line, ID order, or whether a note is true."""
     findings, decisions, problems = parse(text)
     if findings and "triage" not in _sections(text):
         return problems + ["findings exist but there is no '## Triage' section"]

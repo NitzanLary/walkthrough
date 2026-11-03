@@ -2,6 +2,8 @@
 them to self-correct, so every message names the chapter index and the fix."""
 from __future__ import annotations
 
+import math
+
 from . import CHAPTER_BUDGET_MS, MS_PER_WORD
 from .schema import FileEntry, Walkthrough
 
@@ -137,7 +139,7 @@ def check_narration_budget(wt: Walkthrough) -> list[str]:
 
 def default_budget_s(wt: Walkthrough) -> float:
     changed = wt.meta.stats.added + wt.meta.stats.removed
-    return min(BUDGET_MAX_S, max(BUDGET_MIN_S, changed * BUDGET_S_PER_CHANGED_LINE))
+    return float(min(BUDGET_MAX_S, max(BUDGET_MIN_S, changed * BUDGET_S_PER_CHANGED_LINE)))
 
 
 def check_total_budget(wt: Walkthrough, budget_s: float) -> list[str]:
@@ -148,8 +150,9 @@ def check_total_budget(wt: Walkthrough, budget_s: float) -> list[str]:
         return []
     counts = [len(ch.narration.split()) for ch in wt.chapters]
     i = counts.index(max(counts))
+    # Ceil the estimate and floor the budget so an overrun never prints as a tie.
     return [
-        f"narration totals {words} words, about {est_ms / 1000:.0f}s spoken, "
-        f"over the {budget_s:.0f}s budget ({int(budget_s * 1000 // MS_PER_WORD)} "
+        f"narration totals {words} words, about {math.ceil(est_ms / 1000)}s spoken, "
+        f"over the {math.floor(budget_s)}s budget ({int(budget_s * 1000 // MS_PER_WORD)} "
         f"words). Merge repetitive chapters or cut narration; the longest is "
         f"chapters[{i}] ({wt.chapters[i].id}), {counts[i]} words."]

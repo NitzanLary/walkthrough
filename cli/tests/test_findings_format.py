@@ -33,6 +33,7 @@ def test_listener_prompt_example_parses_cleanly():
 
 def test_listener_prompt_has_one_dispatch_separator_and_placeholders():
     text = (REFS / "listener-prompt.md").read_text()
+    assert text.splitlines().count("---") == 1
     prompt = text.split("\n---\n", 1)[1]
     for slot in ("{MARKDOWN}", "{DIFF}", "{FINDINGS}"):
         assert slot in prompt
