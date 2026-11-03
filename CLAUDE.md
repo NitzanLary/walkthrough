@@ -43,7 +43,9 @@ Verify by running the thing, not by reasoning about it — see the camera note b
 
 ## The project
 
-- `skills/walkthrough/` — the planning skill. `/walkthrough` writes `.walkthrough/walkthrough.json`.
+- `skills/walkthrough/` — the planning skill. `/walkthrough` writes `.walkthrough/walkthrough.json`,
+  then has a fresh subagent read it blind and triages the result into `.walkthrough/review/findings.md`
+  before narrating. Its prompts live in `skills/walkthrough/references/`.
 - `cli/` — the `walkthrough` CLI: `validate`, `markdown`, `narrate`, `view`, `studio`, `render`, `clean`.
   Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 tooling missing.
 - `renderer/` — Remotion 4.0.515 (zod pinned to 4.4.3 to match). Camera math in `src/lib/timeline.ts`.

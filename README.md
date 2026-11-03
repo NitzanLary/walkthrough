@@ -28,6 +28,11 @@ exported in the shell wins over all of them.
     # later, from a shell
     walkthrough render             # → .walkthrough/out.mp4
 
+Before narrating, the skill has a fresh subagent read the walkthrough blind,
+then fixes or rules on each finding. The record lands in
+`.walkthrough/review/findings.md`, and the hand-off lists every call the agent
+made on your behalf.
+
 Commands: `validate [--budget SECONDS]` · `markdown` ·
 `narrate [--dry-run] [--check] [--no-cache] [-j N]` ·
 `view` · `studio` · `render [--out PATH]` · `clean`.

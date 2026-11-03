@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -115,3 +116,12 @@ def test_small_example_is_schema_valid_agent_form():
     assert all(c.audio is None for c in wt.chapters)
     assert wt.chapters[0].action == "overview"
     assert wt.chapters[-1].action == "closing"
+
+
+def test_skill_md_points_only_at_files_that_exist():
+    skill = REPO / "skills/walkthrough"
+    text = (skill / "SKILL.md").read_text()
+    refs = set(re.findall(r"`((?:examples|references)/[\w.-]+)`", text))
+    assert {"examples/small.json", "references/listener-prompt.md",
+            "references/triage.md"} <= refs
+    assert [r for r in sorted(refs) if not (skill / r).exists()] == []
