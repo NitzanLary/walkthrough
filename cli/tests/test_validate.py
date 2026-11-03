@@ -287,6 +287,7 @@ def test_total_budget_at_limit_ok_one_word_over_warns():
     assert "201 words" in warnings[0]
     assert "over the 87s budget" in warnings[0]
     assert "Merge" in warnings[0]
+    assert "chapters[0] (" in warnings[0]
 
 
 @pytest.mark.parametrize("added,removed,want", [

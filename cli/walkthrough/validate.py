@@ -146,7 +146,10 @@ def check_total_budget(wt: Walkthrough, budget_s: float) -> list[str]:
     est_ms = words * MS_PER_WORD
     if est_ms <= budget_s * 1000:
         return []
+    counts = [len(ch.narration.split()) for ch in wt.chapters]
+    i = counts.index(max(counts))
     return [
         f"narration totals {words} words, about {est_ms / 1000:.0f}s spoken, "
         f"over the {budget_s:.0f}s budget ({int(budget_s * 1000 // MS_PER_WORD)} "
-        f"words). Merge repetitive chapters or cut narration."]
+        f"words). Merge repetitive chapters or cut narration; the longest is "
+        f"chapters[{i}] ({wt.chapters[i].id}), {counts[i]} words."]
