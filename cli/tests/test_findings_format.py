@@ -80,3 +80,15 @@ def test_unknown_values_and_malformed_rows_are_reported():
     assert "F1: unknown type 'STYLE'" in problems
     assert "F1: unknown severity 'major'" in problems
     assert "F1: unknown decision 'SKIP'" in problems
+
+
+def test_headerless_findings_table_is_not_sound():
+    text = "# Listener findings\n\n## Findings\n\n| F1 | 2 | WHY | blocks | x |\n"
+    assert violations(text) != []
+
+
+def test_wrong_triage_header_is_reported():
+    text = doc(["| F1 | 2 | WHY | blocks | x |"]) + (
+        "\n## Triage\n\n| ID | Verdict | Note |\n|----|---------|------|\n"
+        "| F1 | FIX | added the reason |\n")
+    assert any("triage table header" in p for p in violations(text))

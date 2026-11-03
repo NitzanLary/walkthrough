@@ -41,9 +41,19 @@ def _sections(text: str) -> dict[str, list[str]]:
     return out
 
 
-def _rows(lines: list[str]) -> list[list[str]]:
+FINDINGS_HEADER = ["ID", "Chapter", "Type", "Severity", "Finding"]
+TRIAGE_HEADER = ["ID", "Decision", "Note"]
+
+
+def _rows(lines: list[str], name: str, header: list[str],
+          problems: list[str]) -> list[list[str]]:
     table = [[c.strip() for c in line.strip().strip("|").split("|")]
              for line in lines if line.strip().startswith("|")]
+    if not table:
+        problems.append(f"no table under '## {name.title()}'")
+        return []
+    if table[0] != header:
+        problems.append(f"{name} table header is {table[0]}, want {header}")
     # table[0] is the header; the |----| separator is all dashes.
     return [r for r in table[1:] if not all(set(c) <= set("-: ") for c in r)]
 
@@ -54,7 +64,7 @@ def parse(text: str) -> tuple[dict[str, Finding], list[Decision], list[str]]:
         return {}, [], ["no '## Findings' section"]
     problems: list[str] = []
     findings: dict[str, Finding] = {}
-    for r in _rows(sections["findings"]):
+    for r in _rows(sections["findings"], "findings", FINDINGS_HEADER, problems):
         if len(r) != 5:
             problems.append(f"findings row has {len(r)} cells, want 5: {r}")
             continue
@@ -67,7 +77,9 @@ def parse(text: str) -> tuple[dict[str, Finding], list[Decision], list[str]]:
             problems.append(f"{f.id}: duplicate finding id")
         findings[f.id] = f
     decisions: list[Decision] = []
-    for r in _rows(sections.get("triage", [])):
+    triage = sections.get("triage")
+    for r in ([] if triage is None
+              else _rows(triage, "triage", TRIAGE_HEADER, problems)):
         if len(r) != 3:
             problems.append(f"triage row has {len(r)} cells, want 3: {r}")
             continue
