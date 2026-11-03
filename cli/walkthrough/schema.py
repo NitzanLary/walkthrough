@@ -57,7 +57,8 @@ class Focus(BaseModel):
             raise ValueError("focus.end must be >= focus.start")
         span = self.end - self.start + 1
         if span > MAX_FOCUS_SPAN:
-            raise ValueError(f"focus span {span} exceeds {MAX_FOCUS_SPAN} lines")
+            raise ValueError(f"focus span {span} exceeds {MAX_FOCUS_SPAN} lines; "
+                             f"split it into a scroll sequence")
         return self
 
 

@@ -48,6 +48,17 @@ def test_focus_span_over_60_rejected():
         Walkthrough.model_validate(p)
 
 
+def test_focus_span_60_accepted_61_names_the_fix():
+    p = make_plan()
+    p["chapters"][1]["action"] = "show"
+    p["chapters"][1]["focus"] = {"start": 1, "end": 60, "anchor": "x"}
+    Walkthrough.model_validate(p)
+
+    p["chapters"][1]["focus"]["end"] = 61
+    with pytest.raises(ValidationError, match="61 exceeds 60 lines.*scroll"):
+        Walkthrough.model_validate(p)
+
+
 def test_focus_end_before_start_rejected():
     p = make_plan()
     p["chapters"][1]["focus"] = {"start": 10, "end": 5, "anchor": "x"}

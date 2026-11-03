@@ -6,6 +6,8 @@ from . import CHAPTER_BUDGET_MS, MS_PER_WORD
 from .schema import FileEntry, Walkthrough
 
 DRIFT_WINDOW = 20
+# A taller focus cannot fill the frame, so the shot reads as a `show`.
+MAX_ZOOM_SPAN = 20
 
 
 def content_side(f: FileEntry) -> str:
@@ -74,6 +76,20 @@ def check_focus_ranges(wt: Walkthrough) -> list[str]:
             errors.append(
                 f"chapters[{i}].focus.end ({ch.focus.end}) exceeds "
                 f"line count of {ch.file} ({n})")
+    return errors
+
+
+def check_zoom_span(wt: Walkthrough) -> list[str]:
+    errors = []
+    for i, ch in enumerate(wt.chapters):
+        if ch.action != "zoom" or ch.focus is None:
+            continue
+        span = ch.focus.end - ch.focus.start + 1
+        if span > MAX_ZOOM_SPAN:
+            errors.append(
+                f"chapters[{i}] ({ch.id}): zoom focus spans {span} lines "
+                f"({ch.focus.start}-{ch.focus.end}), over the {MAX_ZOOM_SPAN}-line "
+                f"zoom limit. Narrow it to the lines that matter, or use 'show'.")
     return errors
 
 
