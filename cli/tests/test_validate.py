@@ -3,10 +3,11 @@ import subprocess
 from pathlib import Path
 
 from walkthrough import CHAPTER_BUDGET_MS, MS_PER_WORD
-from walkthrough.schema import Walkthrough
+from walkthrough.schema import FileEntry, Walkthrough
 from walkthrough.validate import (check_anchors, check_chapter_order,
                                   check_file_refs, check_focus_ranges,
-                                  check_narration_budget, check_zoom_span)
+                                  check_narration_budget, check_uncovered_files,
+                                  check_zoom_span)
 
 from conftest import commit_file, git
 from test_schema import make_plan
@@ -241,3 +242,26 @@ def test_cli_validate_rejects_tall_zoom_exit_2(repo):
     res = run_validate(repo, p)
     assert res.returncode == 2
     assert "zoom focus spans 21 lines" in res.stderr
+
+
+def test_uncovered_file_warns_with_path_and_fixes():
+    wt = filled_plan()
+    assert check_uncovered_files(wt) == []
+
+    wt.files.append(FileEntry(path="util.py", status="modified",
+                              before="", after="x = 1\n"))
+    warnings = check_uncovered_files(wt)
+    assert len(warnings) == 1
+    assert "files[1] 'util.py' is shown by no chapter" in warnings[0]
+    assert "incidental chapter" in warnings[0]
+    assert "meta.skipped" in warnings[0]
+
+
+def test_cli_validate_warns_on_uncovered_file_and_exits_0(repo):
+    commit_file(repo, "util.py", "x = 1\n")
+    p = cli_plan(repo)
+    p["files"].append({"path": "util.py", "language": None, "status": "modified",
+                       "old_path": None, "before": None, "after": None})
+    res = run_validate(repo, p)
+    assert res.returncode == 0, res.stderr
+    assert "warning: files[1] 'util.py' is shown by no chapter" in res.stdout

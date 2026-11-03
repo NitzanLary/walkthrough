@@ -22,7 +22,7 @@ from .schema import AudioRef, Walkthrough
 from .stage import ToolingMissing, require_node, stage_assets
 from .validate import (check_anchors, check_chapter_order, check_file_refs,
                        check_focus_ranges, check_narration_budget,
-                       check_zoom_span)
+                       check_uncovered_files, check_zoom_span)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -102,6 +102,7 @@ def validate() -> None:
         errors += check_zoom_span(wt)
         errors += check_chapter_order(wt)
         warnings += check_narration_budget(wt)
+        warnings += check_uncovered_files(wt)
     for msg in warnings:
         typer.echo(f"warning: {msg}")
     if errors:

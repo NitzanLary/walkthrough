@@ -93,6 +93,15 @@ def check_zoom_span(wt: Walkthrough) -> list[str]:
     return errors
 
 
+def check_uncovered_files(wt: Walkthrough) -> list[str]:
+    shown = {ch.file for ch in wt.chapters if ch.file is not None}
+    return [
+        f"files[{j}] '{f.path}' is shown by no chapter. Show it, name it in the "
+        f"incidental chapter's narration, or move it to meta.skipped."
+        for j, f in enumerate(wt.files) if f.path not in shown
+    ]
+
+
 def check_chapter_order(wt: Walkthrough) -> list[str]:
     errors = []
     if not wt.chapters or wt.chapters[0].action != "overview":
