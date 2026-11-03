@@ -54,7 +54,7 @@ Verify by running the thing, not by reasoning about it — see the camera note b
 
 ```bash
 source venv/bin/activate        # system python is PEP-668 locked
-python -m pytest cli -q         # 42 tests + 1 opt-in live test
+python -m pytest cli -q         # includes 1 opt-in live test, skipped by default
 
 cd renderer
 npx vitest run
