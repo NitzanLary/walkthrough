@@ -28,11 +28,28 @@ exported in the shell wins over all of them.
     # later, from a shell
     walkthrough render             # → .walkthrough/out.mp4
 
-Commands: `validate` · `markdown` ·
+Before narrating, the skill has a fresh subagent read the walkthrough blind,
+then fixes or rules on each finding. The record lands in
+`.walkthrough/review/findings.md`, and the hand-off lists every call the agent
+made on your behalf. A plan that still fails `validate` after three fix
+attempts is never narrated; the hand-off reports its errors instead.
+
+Commands: `validate [--budget SECONDS]` · `markdown` ·
 `narrate [--dry-run] [--check] [--no-cache] [-j N]` ·
 `view` · `studio` · `render [--out PATH]` · `clean`.
 Exit codes: 0 ok, 2 validation failure, 3 provider error, 4 environment
 problem (tooling missing, or another render already holds the output path).
+
+`validate` checks the plan against the schema and the recorded SHAs, corrects
+small anchor drift, and rejects a `zoom` taller than 20 lines (any focus over
+60). It warns, still exiting 0, when a chapter's narration runs past 25 s,
+when the whole narration runs past the budget (`--budget`, default
+`clamp((added + removed) × 0.45, 60, 600)` seconds from `meta.stats`), and when
+a file in `files[]` is shown by no chapter.
+
+The zoom limit is new: an existing plan with a `zoom` focus of 21–60 lines now
+fails `validate` with exit 2. Narrow that focus to the lines that matter, or
+change the chapter's action to `show`.
 
 `narrate --dry-run` prints the provider, model, voice, chapter and character
 counts, cache hits and estimated narration length without calling the API;

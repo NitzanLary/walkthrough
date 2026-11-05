@@ -15,8 +15,8 @@ seconds, where `changed_lines` = `meta.stats.added + meta.stats.removed` — the
 part of the diff that survives step 3, not the raw `git diff <base>...HEAD --stat`
 total. Compute it once step 3 has settled which files are in.
 
-Schema: `schema.json` (next to this file). Worked examples: `examples/small.json`
-(~150-line diff), `examples/large.json` (~2k-line diff). Match their shape exactly.
+Schema: `schema.json` (next to this file). Worked example: `examples/small.json`
+(~150-line diff). Match its shape exactly.
 
 ## Procedure
 
@@ -98,33 +98,133 @@ Schema: `schema.json` (next to this file). Worked examples: `examples/small.json
 
 9. **Validate and fix.** Probe the CLI first with `walkthrough --help`. If it is
    not on PATH, stop here and report that the plan is written and that
-   `cd cli && pip install -e .` unlocks the rest — steps 9 and 10 are entirely
-   CLI work. Otherwise run `walkthrough validate`, read its errors, fix the
-   JSON, and rerun until it exits 0 (exit 2 is a validation failure). Cap at 3
-   attempts, then report the remaining errors to the user.
+   `cd cli && pip install -e .` unlocks the rest; everything from here on needs
+   the CLI. Otherwise run `walkthrough validate`, adding `--budget SECONDS`
+   when the user passed one (without it, `validate` derives the default budget
+   above from `meta.stats`). Read its errors, fix the JSON, and rerun until it
+   exits 0 (exit 2 is a validation failure). Cap at 3 attempts.
+
+   **Validation gate.** This cap applies to every `validate` run in steps 9,
+   10, and 12. If `validate` still exits 2 after its 3 attempts, stop. Do not
+   run `narrate` or `view`, because an invalid plan is never narrated. Hand
+   off instead:
+   - the remaining errors;
+   - the markdown path, if `walkthrough markdown` has run;
+   - `.walkthrough/review/findings.md`, if the listener pass ran.
 
    Focus line numbers do not have to be exact. When the anchor text matches
    exactly one line within ±20 lines of `focus.start`, `validate` shifts `start`
    and `end` by that delta, prints a `warning:`, and writes the corrected plan
-   back — that is the expected path, not something to pre-empt. Only two things
-   are errors: an anchor found nowhere in that window (wrong text, or a line
-   number off by more than 20), and an anchor matching several lines inside it.
-   Both are fixed by choosing a more distinctive start line — a `def`, `class`,
-   or decorator rather than a brace, a blank line, or a line that repeats
-   nearby. Author anchors for distinctiveness, not for line-number precision.
+   back. That is the expected path, not something to pre-empt. Only two anchor
+   problems are errors: an anchor found nowhere in that window (wrong text, or
+   a line number off by more than 20), and an anchor matching several lines
+   inside it. Both are fixed by choosing a more distinctive start line — a
+   `def`, `class`, or decorator rather than a brace, a blank line, or a line
+   that repeats nearby. Author anchors for distinctiveness, not for
+   line-number precision.
 
-   The other warning is not optional. `validate` estimates each chapter's
-   spoken length from its word count and warns when one runs past the 25 s
-   ceiling; that names a chapter to cut or split into a zoom + scroll pair
-   before you hand off.
+   `validate` also rejects a `zoom` whose focus spans more than 20 lines, and
+   any focus over 60; each message names the chapter and the fix. Its other
+   warnings exit 0 but are not optional, and step 10 resolves every one: a
+   chapter over the 25 s ceiling, narration over the total budget, and a file
+   that no chapter shows.
 
-10. **Hand off.** Run `walkthrough markdown`, then `walkthrough narrate`, then
-    `walkthrough view`. Report the player URL, the markdown path, and the
-    chapter list. The three fail independently, so report what succeeded rather
-    than only the last error:
+10. **Coverage self-review.** Check the plan yourself against this list, fix
+    the JSON inline, then rerun `walkthrough validate` until it exits 0, with
+    the same cap of 3 attempts and the same gate as step 9:
+    1. Every step-9 warning is resolved. Cut a chapter over the 25 s ceiling,
+       or split it into a zoom + scroll pair. Merge or cut chapters until the
+       total fits the budget. For a file that no chapter shows, either show
+       it, move it to `meta.skipped`, or name it in the incidental chapter's
+       narration. The last option leaves that warning standing, so list the
+       file under "Calls I made" at hand-off.
+    2. Every significant hunk in the diff maps to a chapter, the incidental
+       chapter, or `meta.skipped`.
+    3. Every chapter says why the code is shaped this way, not only what it
+       does.
+    4. No chapter relies on a term, type, or function that only a later
+       chapter introduces.
+
+    Do not re-review after fixing; the listener pass is the next check.
+
+11. **Listener pass.** You wrote this plan knowing the code, so you cannot see
+    where a newcomer gets lost. A fresh reader can.
+    1. Run `walkthrough markdown`. Then remove any `findings.md` left by an
+       earlier run, so the hand-off never reports a stale one:
+       ```
+       mkdir -p .walkthrough/review && rm -f .walkthrough/review/findings.md
+       ```
+    2. Write the diff of the kept paths: every `files[].path`, plus
+       `old_path` for renames.
+       ```
+       git diff <meta.base_sha> <meta.head_sha> -- <kept paths> > .walkthrough/review/diff.patch
+       ```
+    3. Read `references/listener-prompt.md` (next to this file). Fill in its
+       three absolute paths and dispatch the prompt to one fresh
+       general-purpose subagent. Send only that prompt: no session history,
+       no `walkthrough.json`, no coaching.
+    4. The subagent writes `.walkthrough/review/findings.md` and replies with
+       counts only.
+
+    If you have no subagent tool, run sub-step 1 only, skip sub-steps 2–4 and
+    step 12, and say so at hand-off. Do not substitute your own read of the
+    markdown, because you cannot read your own plan blind.
+
+12. **Triage and fix.** Read `references/triage.md` now, immediately before
+    triaging. Then:
+    1. Append a `## Triage` table to `findings.md` with one row per finding,
+       marked `FIX`, `RULING`, or `N/A` as that file defines them. A `blocks`
+       finding is `FIX` unless a `RULING` names a concrete reason.
+    2. Apply every `FIX` in one edit pass over `.walkthrough/walkthrough.json`.
+       Answer `WHY` findings from what you know from building this change,
+       then from commit messages and the PR body. Never ask the user.
+    3. Rerun `walkthrough validate` (cap 3 attempts, as in step 9). Once it
+       exits 0, run `walkthrough markdown`.
+
+    This is a single wave. Do not dispatch the listener again. If `validate`
+    still exits 2 after the cap, the step-9 gate applies: stop without
+    narrating and hand off the remaining errors, the markdown path from step
+    11 (it shows the plan before this wave), and `findings.md`. Do not loop. If the findings table is empty
+    (`nothing important`), there is nothing to triage.
+
+13. **Hand off.** Run `narrate` and `view` only if the last `validate` exited
+    0. Otherwise the step-9 gate has already stopped you; hand off what it
+    lists.
+
+    Run `walkthrough narrate`. Then start `walkthrough view` in the
+    background, because it keeps serving until stopped. Another server may
+    already hold port 3000, and `curl` would then succeed against it, so
+    check `view` itself before trusting `curl`:
+    1. Wait up to 30 s for `view` to print `player: http://localhost:3000`.
+       It prints that only after finding the port free. If `view` exits
+       first, record its exit code and skip `curl`.
+    2. Run `curl -sf -o /dev/null http://localhost:3000`, retrying for up to
+       30 s.
+    3. Confirm the background `view` process is still running, using your
+       background-task tool's status or `kill -0 <pid>`.
+
+    Report:
+    - each command's exit code: the last `validate`, `markdown`, and
+      `narrate`, plus `view` if it exited, or the `curl` failure;
+    - the player URL, only if the `view` process is still running and `curl`
+      succeeded;
+    - the markdown path and the chapter list;
+    - `.walkthrough/review/findings.md`, only if the listener pass ran, so
+      the user can audit the triage;
+    - **Calls I made:**
+      - every path in `meta.skipped`;
+      - every chapter that merges several hunks, and the pattern it names;
+      - every file left unshown on purpose;
+      - every `RULING` row, with its cost if wrong;
+      - every `unanswered:` row;
+      - whether the listener pass was skipped.
+
+    The commands fail independently, so report what succeeded rather than only
+    the last error:
     - `markdown` needs nothing beyond the validated plan.
     - `narrate` exits 3 when no TTS key is configured. The markdown is a
-      complete text walkthrough on its own — still report its path.
-    - `view` exits 4 when Node is missing or the renderer has no
-      `node_modules`; its message names the fix. Report the markdown path and
-      omit the player URL.
+      complete text walkthrough on its own, so still report its path.
+    - `view` exits 4 when Node is missing, the renderer has no
+      `node_modules`, or port 3000 is taken; its message names the fix. Report
+      the markdown path and omit the player URL, even if `curl` reached
+      whatever already holds the port.

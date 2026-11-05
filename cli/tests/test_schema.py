@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -45,6 +46,17 @@ def test_focus_span_over_60_rejected():
     p = make_plan()
     p["chapters"][1]["focus"] = {"start": 1, "end": 61, "anchor": "x"}
     with pytest.raises(ValidationError, match="60"):
+        Walkthrough.model_validate(p)
+
+
+def test_focus_span_60_accepted_61_names_the_fix():
+    p = make_plan()
+    p["chapters"][1]["action"] = "show"
+    p["chapters"][1]["focus"] = {"start": 1, "end": 60, "anchor": "x"}
+    Walkthrough.model_validate(p)
+
+    p["chapters"][1]["focus"]["end"] = 61
+    with pytest.raises(ValidationError, match="61 exceeds 60 lines.*scroll"):
         Walkthrough.model_validate(p)
 
 
@@ -104,3 +116,12 @@ def test_small_example_is_schema_valid_agent_form():
     assert all(c.audio is None for c in wt.chapters)
     assert wt.chapters[0].action == "overview"
     assert wt.chapters[-1].action == "closing"
+
+
+def test_skill_md_points_only_at_files_that_exist():
+    skill = REPO / "skills/walkthrough"
+    text = (skill / "SKILL.md").read_text()
+    refs = set(re.findall(r"`((?:examples|references)/[\w.-]+)`", text))
+    assert {"examples/small.json", "references/listener-prompt.md",
+            "references/triage.md"} <= refs
+    assert [r for r in sorted(refs) if not (skill / r).exists()] == []

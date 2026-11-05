@@ -2,10 +2,18 @@
 them to self-correct, so every message names the chapter index and the fix."""
 from __future__ import annotations
 
+import math
+
 from . import CHAPTER_BUDGET_MS, MS_PER_WORD
 from .schema import FileEntry, Walkthrough
 
 DRIFT_WINDOW = 20
+# A taller focus cannot fill the frame, so the shot reads as a `show`.
+MAX_ZOOM_SPAN = 20
+# The default total budget, the same formula SKILL.md states: seconds per
+# changed line in the kept diff, clamped.
+BUDGET_S_PER_CHANGED_LINE = 0.45
+BUDGET_MIN_S, BUDGET_MAX_S = 60, 600
 
 
 def content_side(f: FileEntry) -> str:
@@ -77,6 +85,29 @@ def check_focus_ranges(wt: Walkthrough) -> list[str]:
     return errors
 
 
+def check_zoom_span(wt: Walkthrough) -> list[str]:
+    errors = []
+    for i, ch in enumerate(wt.chapters):
+        if ch.action != "zoom" or ch.focus is None:
+            continue
+        span = ch.focus.end - ch.focus.start + 1
+        if span > MAX_ZOOM_SPAN:
+            errors.append(
+                f"chapters[{i}] ({ch.id}): zoom focus spans {span} lines "
+                f"({ch.focus.start}-{ch.focus.end}), over the {MAX_ZOOM_SPAN}-line "
+                f"zoom limit. Narrow it to the lines that matter, or use 'show'.")
+    return errors
+
+
+def check_uncovered_files(wt: Walkthrough) -> list[str]:
+    shown = {ch.file for ch in wt.chapters if ch.file is not None}
+    return [
+        f"files[{j}] '{f.path}' is shown by no chapter. Show it, name it in the "
+        f"incidental chapter's narration, or move it to meta.skipped."
+        for j, f in enumerate(wt.files) if f.path not in shown
+    ]
+
+
 def check_chapter_order(wt: Walkthrough) -> list[str]:
     errors = []
     if not wt.chapters or wt.chapters[0].action != "overview":
@@ -104,3 +135,24 @@ def check_narration_budget(wt: Walkthrough) -> list[str]:
             f"chapter ceiling ({CHAPTER_BUDGET_MS // MS_PER_WORD} words). Cut it "
             f"or split the chapter into a zoom + scroll pair.")
     return warnings
+
+
+def default_budget_s(wt: Walkthrough) -> float:
+    changed = wt.meta.stats.added + wt.meta.stats.removed
+    return float(min(BUDGET_MAX_S, max(BUDGET_MIN_S, changed * BUDGET_S_PER_CHANGED_LINE)))
+
+
+def check_total_budget(wt: Walkthrough, budget_s: float) -> list[str]:
+    """Warn when the whole narration will overrun the walkthrough's budget."""
+    words = sum(len(ch.narration.split()) for ch in wt.chapters)
+    est_ms = words * MS_PER_WORD
+    if est_ms <= budget_s * 1000:
+        return []
+    counts = [len(ch.narration.split()) for ch in wt.chapters]
+    i = counts.index(max(counts))
+    # Ceil the estimate and floor the budget so an overrun never prints as a tie.
+    return [
+        f"narration totals {words} words, about {math.ceil(est_ms / 1000)}s spoken, "
+        f"over the {math.floor(budget_s)}s budget ({int(budget_s * 1000 // MS_PER_WORD)} "
+        f"words). Merge repetitive chapters or cut narration; the longest is "
+        f"chapters[{i}] ({wt.chapters[i].id}), {counts[i]} words."]
